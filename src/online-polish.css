@@ -1,0 +1,76 @@
+/* Online mode polish: keep private information private and make the table usable on phones/tablets. */
+.opponent-private {
+  width: min(460px, calc(100% - 20px));
+  margin: 4px auto 8px;
+  min-height: 54px;
+  border: 1px solid #39352d;
+  border-radius: 14px;
+  background: rgba(22,20,17,.94);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #aaa397;
+}
+.opponent-private > div { display: grid; gap: 3px; }
+.opponent-private strong { color: #e7e0d5; font: 700 9px/1 'IBM Plex Mono', monospace; }
+.opponent-private small { color: #777066; font-size: 10px; }
+.opponent-private em { margin-left: 9px; font: 800 8px/1 'IBM Plex Mono', monospace; color: #ffd24a; font-style: normal; letter-spacing: .08em; }
+.opponent-private.is-current { border-color: #6a6255; box-shadow: 0 0 0 2px rgba(255,210,74,.06); }
+
+.share-invite {
+  background: #ffd24a;
+  color: #171512;
+  border-color: #ffd24a;
+  font-weight: 900;
+}
+.share-invite:hover { transform: translateY(-1px); filter: brightness(1.04); }
+
+.online-game-page .board-zone { min-width: 0; }
+.online-game-page .current-area { position: relative; z-index: 35; }
+.online-game-page .opponent-area { min-height: 62px; }
+.online-game-page .player-hand.current-hand { max-width: 860px; }
+
+@media (max-width: 900px) {
+  .online-landing,.online-lobby { padding: 22px 14px; }
+  .online-hero h1 { font-size: clamp(36px, 8vw, 66px); }
+  .online-game-page { padding-left: 8px; padding-right: 8px; }
+  .online-game-page .board-zone { overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+  .online-game-page .board-frame { min-width: 740px; }
+  .online-game-page .logic-card { width: 72px; }
+  .online-game-page .hand-fan { min-height: 124px; padding-left: 4px; padding-right: 4px; }
+}
+
+@media (max-width: 640px) {
+  .online-hero { margin-bottom: 16px; }
+  .online-hero p { font-size: 12px; line-height: 1.6; }
+  .online-panel { padding: 16px; border-radius: 17px; }
+  .online-panel h2 { font-size: 22px; }
+  .online-level-tabs { overflow-x: auto; }
+  .online-map-list { grid-template-columns: 1fr; }
+  .lobby-card { padding: 20px 15px; border-radius: 20px; }
+  .lobby-card h1 { font-size: clamp(46px, 16vw, 72px); letter-spacing: .07em; }
+  .online-game-bar { position: sticky; top: 0; z-index: 80; background: rgba(17,16,13,.93); backdrop-filter: blur(8px); padding: 6px 0; }
+  .online-game-bar div:nth-child(2) strong { font-size: 11px; }
+  .status-row { position: sticky; top: 50px; z-index: 70; background: rgba(17,16,13,.90); backdrop-filter: blur(7px); padding-bottom: 6px; }
+  .online-game-page .board-frame { min-width: 700px; }
+  .online-game-page .logic-card { width: 64px; }
+  .online-game-page .hand-fan { min-height: 114px; overflow-x: auto; overflow-y: visible; justify-content: flex-start; padding-left: 20px; padding-right: 20px; }
+  .online-game-page .hand-card-wrap { margin-left: -5px; flex: 0 0 auto; }
+  .opponent-private { min-height: 46px; margin-bottom: 5px; }
+  .opponent-private small { font-size: 9px; }
+  .phase-panel { margin-left: 8px; margin-right: 8px; }
+  .target-choice-grid { gap: 8px; }
+  .disconnect-banner,.copy-toast { max-width: calc(100% - 24px); width: max-content; text-align: center; }
+}
+
+@media (orientation: portrait) and (max-width: 700px) {
+  .online-game-page::after {
+    content: '회로판은 좌우로 스크롤할 수 있습니다 · 가로 화면 권장';
+    display: block;
+    margin: 6px auto 0;
+    text-align: center;
+    color: #756e64;
+    font-size: 9px;
+  }
+}
