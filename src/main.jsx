@@ -11,7 +11,7 @@ import './game.css'
 import './launcher.css'
 
 const params = new URLSearchParams(window.location.search)
-const onlineMode = params.get('online') === '1' || params.has('room')
+const onlineMode = params.get('online') === '1' || params.has('room') || params.has('host')
 const localMode = params.get('local') === '1'
 const RootApp = onlineMode ? OnlineApp : localMode ? App : Launcher
 
