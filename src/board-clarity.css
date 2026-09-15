@@ -1,0 +1,76 @@
+/* Circuit readability overrides: keep the printed-board feel, but make topology win over decoration. */
+.board-canvas {
+  background:
+    radial-gradient(circle at 18% 13%, rgba(255,255,255,.38), transparent 20%),
+    repeating-linear-gradient(0deg, rgba(88,73,52,.016), rgba(88,73,52,.016) 1px, transparent 1px, transparent 7px),
+    #eee6d8;
+}
+
+.board-fold { opacity: .08; }
+.board-edition { opacity: .55; }
+
+.board-wire-outline {
+  stroke: rgba(255,255,255,.9);
+  stroke-width: 7;
+}
+
+.board-wire-base {
+  stroke: #48423b;
+  stroke-width: 3;
+}
+
+.wire-label-bg {
+  fill: #211e1a;
+  stroke: #f5eee3;
+  stroke-width: 1.5;
+}
+
+.wire-label {
+  fill: #fffaf1;
+  font: 900 10px/1 'IBM Plex Mono';
+  stroke-width: 2.5px;
+}
+
+.board-wire-signal { stroke-width: 5; }
+
+/* Visible circuit terminals. Their positions match the two gate input offsets (±17 map units). */
+.card-slot::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  z-index: 12;
+  pointer-events: none;
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at 0 36%, #29251f 0 4px, #f7efe3 4.5px 6px, transparent 6.5px),
+    radial-gradient(circle at 0 64%, #29251f 0 4px, #f7efe3 4.5px 6px, transparent 6.5px),
+    radial-gradient(circle at 100% 50%, #29251f 0 4px, #f7efe3 4.5px 6px, transparent 6.5px);
+}
+
+.wild-slot::after {
+  background:
+    radial-gradient(circle at 0 50%, #29251f 0 4px, #f7efe3 4.5px 6px, transparent 6.5px),
+    radial-gradient(circle at 100% 50%, #29251f 0 4px, #f7efe3 4.5px 6px, transparent 6.5px);
+}
+
+.input-node::after,
+.output-node::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #29251f;
+  border: 2px solid #f7efe3;
+  transform: translateY(-50%);
+  z-index: 12;
+  pointer-events: none;
+}
+
+.input-node::after { right: -7px; }
+.output-node::before { left: -7px; }
+
+.card-slot.legal::after {
+  filter: drop-shadow(0 0 5px rgba(200,151,21,.45));
+}
