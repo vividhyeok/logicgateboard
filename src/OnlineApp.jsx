@@ -35,13 +35,13 @@ function IdentityStrip({ playerId, role, roomCode }) {
   </div>
 }
 
-function OnlineLanding({ onHost, onJoin, roomCode, setRoomCode, logCount, onExport }) {
+function OnlineLanding({ onHost, onJoin, roomCode, setRoomCode }) {
   const [level, setLevel] = useState(1)
   const [selectedMap, setSelectedMap] = useState(MAPS.find((map) => map.level === 1)?.id)
   const maps = MAPS.filter((map) => map.level === level)
   useEffect(() => { if (!MAP_BY_ID[selectedMap] || MAP_BY_ID[selectedMap].level !== level) setSelectedMap(maps[0]?.id) }, [level])
   return <main className="online-landing">
-    <header className="online-hero"><div><span>ONLINE 2P PLAYTEST</span><h1>PC · 태블릿 · 폰에서<br/><em>각자 자기 패로.</em></h1><p>한 명이 방을 만들고 6자리 코드를 공유하면 서로 다른 기기에서 바로 플레이할 수 있습니다.</p></div><div className="online-hero-tools"><a href="/" className="online-back-link">← SOLO / PASS & PLAY</a><button className="online-log-button" disabled={!logCount} onClick={onExport}>온라인 로그 {logCount} · JSON</button></div></header>
+    <header className="online-hero"><div><span>ONLINE 2 PLAYER</span><h1>PC · 태블릿 · 폰에서<br/><em>각자 자기 패로.</em></h1><p>한 명이 방을 만들고 코드를 공유하면 서로 다른 기기에서 바로 플레이할 수 있습니다.</p></div><div className="online-hero-tools"><a href="/" className="online-back-link">← 다른 게임 모드</a></div></header>
     <section className="online-connect-grid">
       <div className="online-panel host-panel"><span className="eyebrow">HOST A GAME · PLAYER 1</span><h2>내가 방 만들기</h2><div className="online-level-tabs">{[1,2].map((item)=><button key={item} className={level===item?'active':''} onClick={()=>setLevel(item)}>LEVEL {item}</button>)}</div><div className="online-map-list">{maps.map((map)=><button key={map.id} className={selectedMap===map.id?'active':''} onClick={()=>setSelectedMap(map.id)}><div><MapPreview map={map}/></div><span><b>{map.code}</b>{map.name}</span></button>)}</div><button className="online-primary" onClick={()=>onHost(selectedMap)}>PLAYER 1로 방 만들기</button></div>
       <div className="online-panel join-panel"><span className="eyebrow">JOIN A GAME · PLAYER 2</span><h2>친구 방 들어가기</h2><p>초대 링크를 열면 자동 접속됩니다. 코드만 받았다면 아래 6자리를 입력하세요.</p><label>ROOM CODE<input value={roomCode} onChange={(event)=>setRoomCode(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6))} placeholder="ABC234" maxLength={6} autoCapitalize="characters" inputMode="text"/></label><button className="online-primary secondary" disabled={roomCode.length < 6} onClick={()=>onJoin(roomCode)}>PLAYER 2로 입장하기</button><div className="online-note"><strong>재연결 지원</strong><span>잠깐 네트워크가 끊겨도 방과 마지막 게임 상태를 유지하고 같은 링크에서 재접속합니다.</span></div></div>
@@ -49,11 +49,11 @@ function OnlineLanding({ onHost, onJoin, roomCode, setRoomCode, logCount, onExpo
   </main>
 }
 
-function Lobby({ role, playerId, roomCode, connected, connectionState, disconnectCount, mapId, error, onStart, onShare, onLeave, logCount, onExport }) {
+function Lobby({ role, playerId, roomCode, connected, connectionState, disconnectCount, mapId, error, onStart, onShare, onLeave }) {
   const map = MAP_BY_ID[mapId]
   const opponentId = 1 - playerId
   const stateText = connected ? `PLAYER ${opponentId + 1} CONNECTED` : connectionState === 'reconnecting' ? `PLAYER ${opponentId + 1} 재연결 대기 중` : `WAITING FOR PLAYER ${opponentId + 1}`
-  return <main className="online-lobby"><div className="lobby-card"><div className="lobby-status"><span className={connected?'dot live':'dot'}/>{stateText}</div><IdentityStrip playerId={playerId} role={role} roomCode={roomCode}/><span className="eyebrow">ONLINE ROOM CODE</span><h1>{roomCode}</h1>{map&&<div className="lobby-map"><div><MapPreview map={map}/></div><span>{map.code} · {map.name}</span></div>}{disconnectCount>0&&<div className="reconnect-note">재연결 {disconnectCount}회 · 방 상태는 유지됩니다.</div>}{role==='host'?<><p>친구에게 공유 버튼으로 보내세요. 공유 링크로 들어온 플레이어는 PLAYER 2가 됩니다.</p><button className="copy-invite share-invite" onClick={onShare}>친구에게 공유하기</button><button className="online-primary" disabled={!connected} onClick={onStart}>{connected?'게임 시작':'친구 접속 대기 중'}</button></>:<><p>{connected?'연결 완료. 당신은 PLAYER 2입니다. PLAYER 1이 게임을 시작하기를 기다리는 중입니다.':'PLAYER 1 방에 연결하는 중입니다.'}</p><div className="lobby-loader"><i/><i/><i/></div></>}{error&&<div className="online-error">{error}</div>}<div className="lobby-actions"><button className="online-log-button" disabled={!logCount} onClick={onExport}>온라인 로그 {logCount} · JSON</button><button className="text-exit" onClick={onLeave}>나가기</button></div></div></main>
+  return <main className="online-lobby"><div className="lobby-card"><div className="lobby-status"><span className={connected?'dot live':'dot'}/>{stateText}</div><IdentityStrip playerId={playerId} role={role} roomCode={roomCode}/><span className="eyebrow">ONLINE ROOM CODE</span><h1>{roomCode}</h1>{map&&<div className="lobby-map"><div><MapPreview map={map}/></div><span>{map.code} · {map.name}</span></div>}{disconnectCount>0&&<div className="reconnect-note">연결 복구 중 · 게임은 그대로 유지됩니다.</div>}{role==='host'?<><p>함께 플레이할 사람에게 링크를 보내세요.</p><button className="copy-invite share-invite" onClick={onShare}>초대 링크 공유</button><button className="online-primary" disabled={!connected} onClick={onStart}>{connected?'게임 시작':'상대 접속 대기 중'}</button></>:<><p>{connected?'입장 완료. 방장이 게임을 시작할 때까지 기다려 주세요.':'방에 연결하는 중입니다.'}</p><div className="lobby-loader"><i/><i/><i/></div></>}{error&&<div className="online-error">{error}</div>}<div className="lobby-actions"><button className="text-exit" onClick={onLeave}>나가기</button></div></div></main>
 }
 
 function WaitingPanel({ children }) { return <motion.div className="phase-panel online-waiting" initial={{opacity:0,y:12}} animate={{opacity:1,y:0}}><span className="eyebrow">OPPONENT ACTION</span><h2>{children}</h2><div className="loader-line"/></motion.div> }
@@ -330,8 +330,8 @@ export default function OnlineApp() {
     const url=new URL(window.location.href); url.search=''; window.location.href=url.toString()
   }
 
-  if(screen==='landing')return <OnlineLanding onHost={createRoom} onJoin={joinRoom} roomCode={roomCode} setRoomCode={setRoomCode} logCount={onlineRecords.length} onExport={exportOnlineRecords}/>
-  if(screen==='lobby'&&role&&playerId!==null)return <Lobby role={role} playerId={playerId} roomCode={roomCode} connected={connected} connectionState={connectionState} disconnectCount={disconnectCount} mapId={mapId} error={error} onStart={()=>startMatch()} onShare={shareInvite} onLeave={leave} logCount={onlineRecords.length} onExport={exportOnlineRecords}/>
+  if(screen==='landing')return <OnlineLanding onHost={createRoom} onJoin={joinRoom} roomCode={roomCode} setRoomCode={setRoomCode}/>
+  if(screen==='lobby'&&role&&playerId!==null)return <Lobby role={role} playerId={playerId} roomCode={roomCode} connected={connected} connectionState={connectionState} disconnectCount={disconnectCount} mapId={mapId} error={error} onStart={()=>startMatch()} onShare={shareInvite} onLeave={leave}/>
   if(!game||playerId===null||!role)return null
 
   const me=game.players[playerId]

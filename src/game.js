@@ -32,7 +32,7 @@ function buildDeck() {
   let serial = 0
   return GATE_TYPES.flatMap((type) => Array.from({ length: GATE_COPIES[type] }, () => ({ id: `${type.toLowerCase()}-${serial++}`, type })))
 }
-function blankPlayer(id) { return { id, assignedInputs: [], inputValues: {}, target: null, hand: [], initialHand: [], wildUsed: false } }
+function blankPlayer(id) { return { id, assignedInputs: [], inputValues: {}, inputsLocked: false, target: null, hand: [], initialHand: [], wildUsed: false } }
 
 export function createGame(mapId, mode = 'local', seed = Math.floor(Math.random() * 2147483647)) {
   const map = MAP_BY_ID[mapId]
@@ -58,7 +58,10 @@ export function chooseTarget(game, playerId, target) {
   return next
 }
 export function nextInputPlayer(game) {
-  for (const player of game.players) if (Object.keys(player.inputValues).length === 0) return player.id
+  for (const player of game.players) {
+    const locked = player.inputsLocked ?? Object.keys(player.inputValues).length > 0
+    if (!locked) return player.id
+  }
   return null
 }
 export function randomInputsForPlayer(game, playerId) {
@@ -68,10 +71,12 @@ export function randomInputsForPlayer(game, playerId) {
 export function setPlayerInputs(game, playerId, values) {
   if (game.phase !== 'input_selection') return game
   const player = game.players[playerId]
-  if (Object.keys(player.inputValues).length || player.assignedInputs.some((id) => values[id] === undefined)) return game
+  const alreadyLocked = player.inputsLocked ?? Object.keys(player.inputValues).length > 0
+  if (alreadyLocked || player.assignedInputs.some((id) => values[id] === undefined)) return game
   const next = clone(game)
   next.players[playerId].inputValues = { ...values }
-  const ready = next.players.every((item) => Object.keys(item.inputValues).length === item.assignedInputs.length)
+  next.players[playerId].inputsLocked = true
+  const ready = next.players.every((item) => item.inputsLocked ?? Object.keys(item.inputValues).length === item.assignedInputs.length)
   if (!ready) return next
   const map = MAP_BY_ID[next.mapId]
   const handSize = HAND_SIZE[map.level]
