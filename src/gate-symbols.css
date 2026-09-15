@@ -1,6 +1,6 @@
 /* Standardized ANSI-style two-input logic gate symbols.
-   The original hand-drawn paths remain in the DOM for compatibility, but are
-   visually replaced here so every card uses the familiar textbook silhouette. */
+   The original hand-drawn SVG paths remain in the DOM for compatibility, but
+   are visually replaced here so every card uses the familiar textbook shape. */
 .gate-icon > * { display: none; }
 .gate-icon {
   width: 60px;
@@ -26,18 +26,3 @@
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 70'%3E%3Cg fill='none' stroke='white' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 20H32M5 50H32M29 10Q52 11 67 21Q79 28 87 35Q79 42 67 49Q52 59 29 60Q43 35 29 10Z'/%3E%3Cpath d='M19 10Q33 35 19 60'/%3E%3Cpath d='M87 35H98'/%3E%3C/g%3E%3C/svg%3E");
 }
 .logic-card.compact .gate-icon { width: 76%; height: 46%; }
-
-/* Wild card: make NOT/EMPTY read as a circuit operation rather than plain text. */
-.wild-face { display: grid; justify-items: center; align-content: center; }
-.wild-face::before {
-  content: '';
-  display: block;
-  width: 46px;
-  height: 31px;
-  margin-bottom: 3px;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: contain;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 60'%3E%3Cg fill='none' stroke='white' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 30H23M23 8L69 30L23 52Z'/%3E%3Ccircle cx='78' cy='30' r='8'/%3E%3Cpath d='M86 30H96'/%3E%3C/g%3E%3C/svg%3E");
-}
-.logic-card.compact .wild-face::before { width: 62%; height: 32%; }
