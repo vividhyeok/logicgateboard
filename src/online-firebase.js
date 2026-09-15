@@ -70,6 +70,25 @@ function clearDisconnectTimer(timer) {
   return null
 }
 
+function relayUrl(code, path) {
+  return `/api/relay?code=${encodeURIComponent(String(code).trim().toUpperCase())}&path=${encodeURIComponent(path)}`
+}
+
+async function relayGet(code, path) {
+  const response = await fetch(relayUrl(code, path), { cache: 'no-store' })
+  if (!response.ok) throw new Error(`relay-get-${response.status}`)
+  return response.json()
+}
+
+async function relayWrite(code, path, value, method = 'PUT') {
+  const response = await fetch(relayUrl(code, path), {
+    method,
+    headers: method === 'PUT' ? { 'content-type': 'application/json' } : undefined,
+    body: method === 'PUT' ? JSON.stringify(value) : undefined,
+  })
+  if (!response.ok) throw new Error(`relay-write-${response.status}`)
+}
+
 export function createHostPeer(code, handlers = {}) {
   const db = getFirebaseDatabase()
   const clientId = sessionId('host')
@@ -79,8 +98,42 @@ export function createHostPeer(code, handlers = {}) {
   let disconnectTimer = null
   let heartbeatTimer = null
   let presenceTimer = null
+  let commandPollTimer = null
   let lastGuestHeartbeat = 0
   const unsubscribers = []
+  const processingCommands = new Set()
+
+  async function processGuestMessage(message, key, snapshotRef = null) {
+    const id = message?.id || key
+    if (!message?.payload || !id || processingCommands.has(id)) return
+    processingCommands.add(id)
+    try {
+      await handlers.onData?.(message.payload, id)
+      const ack = { at: Date.now() }
+      await Promise.allSettled([
+        set(ref(db, `rooms/${String(code).trim().toUpperCase()}/messages/guestAcks/${id}`), ack),
+        relayWrite(code, `messages/guestAcks/${id}`, ack),
+      ])
+      await Promise.allSettled([
+        snapshotRef ? remove(snapshotRef) : Promise.resolve(),
+        relayWrite(code, `messages/guestToHost/${id}`, null, 'DELETE'),
+      ])
+    } catch (error) {
+      if (!closed) handlers.onError?.(error)
+    } finally {
+      processingCommands.delete(id)
+    }
+  }
+
+  async function pollGuestCommands() {
+    if (closed) return
+    try {
+      const response = await fetch(`/api/relay-commands?code=${encodeURIComponent(String(code).trim().toUpperCase())}`, { cache: 'no-store' })
+      if (!response.ok) return
+      const messages = await response.json()
+      await Promise.all(Object.entries(messages || {}).map(([key, message]) => processGuestMessage(message, key)))
+    } catch {}
+  }
 
   function applyGuestPresence(next) {
     if (closed) return
@@ -144,14 +197,9 @@ export function createHostPeer(code, handlers = {}) {
           try { await remove(snapshot.ref) } catch {}
           return
         }
-        try {
-          await handlers.onData?.(message.payload, message.id)
-          if (message.id) await set(ref(db, `rooms/${String(code).trim().toUpperCase()}/messages/guestAcks/${message.id}`), { at: serverTimestamp() })
-          await remove(snapshot.ref)
-        } catch (error) {
-          if (!closed) handlers.onError?.(error)
-        }
+        await processGuestMessage(message, snapshot.key, snapshot.ref)
       }))
+      commandPollTimer = window.setInterval(pollGuestCommands, 1200)
 
       handlers.onReady?.()
     } catch (error) {
@@ -162,11 +210,13 @@ export function createHostPeer(code, handlers = {}) {
   return {
     send(data) {
       if (closed) return
-      set(refs.hostLatest, {
+      const message = {
         id: messageId(),
-        sentAt: serverTimestamp(),
+        sentAt: Date.now(),
         payload: data,
-      }).catch((error) => handlers.onError?.(error))
+      }
+      set(refs.hostLatest, message).catch((error) => handlers.onError?.(error))
+      relayWrite(code, 'messages/hostToGuest/latest', message).catch(() => {})
     },
     connected() { return connected },
     async setMeta(values = {}) {
@@ -182,6 +232,7 @@ export function createHostPeer(code, handlers = {}) {
       disconnectTimer = clearDisconnectTimer(disconnectTimer)
       if (heartbeatTimer) window.clearInterval(heartbeatTimer)
       if (presenceTimer) window.clearInterval(presenceTimer)
+      if (commandPollTimer) window.clearInterval(commandPollTimer)
       unsubscribers.forEach((unsubscribe) => unsubscribe())
       try { await remove(refs.root) } catch {}
     },
@@ -190,6 +241,7 @@ export function createHostPeer(code, handlers = {}) {
       disconnectTimer = clearDisconnectTimer(disconnectTimer)
       if (heartbeatTimer) window.clearInterval(heartbeatTimer)
       if (presenceTimer) window.clearInterval(presenceTimer)
+      if (commandPollTimer) window.clearInterval(commandPollTimer)
       unsubscribers.forEach((unsubscribe) => unsubscribe())
       try { await remove(refs.ownPresence) } catch {}
     },
@@ -220,7 +272,9 @@ export function createGuestPeer(code, handlers = {}) {
 
   function pollLatestHostState() {
     if (closed) return
-    get(refs.hostLatest).then(applyHostMessage).catch(() => {})
+    relayGet(code, 'messages/hostToGuest/latest').then((message) => applyHostMessage({ val: () => message })).catch(() => {
+      get(refs.hostLatest).then(applyHostMessage).catch(() => {})
+    })
   }
 
   function stopPending(id) {
@@ -232,9 +286,9 @@ export function createGuestPeer(code, handlers = {}) {
 
   function writeCommand(id, payload) {
     if (closed) return
-    set(ref(db, `rooms/${String(code).trim().toUpperCase()}/messages/guestToHost/${id}`), {
-      id, clientId, sentAt: serverTimestamp(), payload,
-    }).catch((error) => { if (!closed) handlers.onError?.(error) })
+    const message = { id, clientId, sentAt: Date.now(), payload }
+    set(ref(db, `rooms/${String(code).trim().toUpperCase()}/messages/guestToHost/${id}`), message).catch(() => {})
+    relayWrite(code, `messages/guestToHost/${id}`, message).catch((error) => { if (!closed) handlers.onError?.(error) })
   }
 
   function applyHostPresence(next) {
@@ -319,7 +373,15 @@ export function createGuestPeer(code, handlers = {}) {
       if (closed) return
       const id = messageId().replace(/[^a-zA-Z0-9-]/g, '')
       const startedAt = Date.now()
-      const timer = window.setInterval(() => {
+      const timer = window.setInterval(async () => {
+        try {
+          const ack = await relayGet(code, `messages/guestAcks/${id}`)
+          if (ack) {
+            stopPending(id)
+            relayWrite(code, `messages/guestAcks/${id}`, null, 'DELETE').catch(() => {})
+            return
+          }
+        } catch {}
         if (Date.now() - startedAt > COMMAND_TTL_MS) {
           stopPending(id)
           handlers.onDeliveryTimeout?.(data)
