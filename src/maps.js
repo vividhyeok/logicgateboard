@@ -78,8 +78,8 @@ function edgePorts(map, edge) {
   const sourceHalf = nodeHalfSize(from)
   const targetHalf = nodeHalfSize(to)
   return {
-    source: { x: from.x + sourceHalf.x + 7, y: from.y },
-    target: { x: to.x - targetHalf.x - 7, y: to.y + targetOffset },
+    source: { x: from.x + sourceHalf.x, y: from.y },
+    target: { x: to.x - targetHalf.x, y: to.y + targetOffset },
   }
 }
 
