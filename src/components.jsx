@@ -101,7 +101,7 @@ export function GameBoard({ map, game, viewerId, selectedAction, onSlotClick, re
             return <div key={node.id} className="board-node input-node" style={style}><BoardInputCard id={node.id} value={inputValue ?? ownedValue} owner={owner} reveal={inputValue !== null || revealAllInputs} activeSignal={signal}/></div>
           }
           if (node.type === 'output') return <div key={node.id} className="board-node output-node" style={style}><OutputCard value={solution?.output} revealed={Boolean(signalVisible)}/>{signal !== undefined && <SignalDot value={signal}/>}</div>
-          const placement = game.placements[node.id]; const legal = legalSlots.includes(node.id)
+          const placement = game.placements?.[node.id]; const legal = legalSlots.includes(node.id)
           return <button key={node.id} type="button" data-slot-id={node.id} className={`board-node card-slot ${node.type === 'wild' ? 'wild-slot' : ''} ${legal ? 'legal' : ''} ${placement ? 'filled' : ''}`} style={style} onClick={() => legal && onSlotClick(node.id)} disabled={!legal && !placement}>
             {!placement ? <div className="slot-print"><span>{node.type === 'wild' ? 'WILD' : 'GATE'}</span><strong>{node.id}</strong>{legal && <em>PLACE</em>}</div> : placement.kind === 'gate' ? <GateCard card={{id:placement.cardId,type:placement.cardType}} compact owner={placement.playerId} layoutId={`card-${placement.cardId}`}/> : <WildCard playerId={placement.playerId} side={placement.cardType} compact/>}
             {signal !== undefined && <SignalDot value={signal}/>}</button>

@@ -107,9 +107,10 @@ export function getWildAction(playerId, side) { return { kind: 'wild', cardId: `
 export function legalSlotIds(game, action, playerId = game.currentPlayer) {
   if (game.phase !== 'play' || !action || playerId !== game.currentPlayer) return []
   const map = MAP_BY_ID[game.mapId]
-  if (action.kind === 'gate') return gateIds(map).filter((id) => !game.placements[id])
+  const placements = game.placements || {}
+  if (action.kind === 'gate') return gateIds(map).filter((id) => !placements[id])
   if (game.players[playerId].wildUsed) return []
-  return wildIds(map).filter((id) => !game.placements[id])
+  return wildIds(map).filter((id) => !placements[id])
 }
 export function allLegalActions(game, playerId = game.currentPlayer) {
   if (game.phase !== 'play' || playerId !== game.currentPlayer) return []
@@ -141,6 +142,7 @@ export function playMove(game, slotId, action) {
     player.wildUsed = true
     placement = { playerId: next.currentPlayer, slotId, kind: 'wild', cardId: `wild-p${next.currentPlayer}`, cardType: action.side, turn: next.turnNumber }
   }
+  next.placements ||= {}
   next.placements[slotId] = placement
   next.moves.push(placement)
   next.turnNumber += 1

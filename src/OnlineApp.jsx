@@ -17,6 +17,22 @@ const HOST_RECOVERY_PREFIX = 'logic-gate-duel-host-room:'
 function readRecords() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]') } catch { return [] } }
 function hostRecoveryKey(code) { return `${HOST_RECOVERY_PREFIX}${String(code).toUpperCase()}` }
 function readHostRecovery(code) { try { return JSON.parse(localStorage.getItem(hostRecoveryKey(code)) || 'null') } catch { return null } }
+function normalizeRemoteGame(game) {
+  if (!game) return game
+  return {
+    ...game,
+    placements: game.placements || {},
+    moves: game.moves || [],
+    deck: game.deck || [],
+    players: (game.players || []).map((player) => ({
+      ...player,
+      assignedInputs: player.assignedInputs || [],
+      inputValues: player.inputValues || {},
+      hand: player.hand || [],
+      initialHand: player.initialHand || [],
+    })),
+  }
+}
 
 function OpponentPrivate({ playerId, isCurrent, roleLabel }) {
   return <section className={`opponent-private ${isCurrent ? 'is-current' : ''}`}>
@@ -133,7 +149,7 @@ export default function OnlineApp() {
   function clearHostRecovery(code=roomRef.current){ try{ localStorage.removeItem(hostRecoveryKey(code)) }catch{} }
 
   function setDealPulse(){ setDealing(true); later(()=>setDealing(false),1100) }
-  function showStart(snapshot){ setGame(snapshot); setScreen('game'); setSelectedAction(null); setInputDraft({}); setWildSide('NOT'); setSolution(null); setRevealIndex(-1); setResolving(false); setSyncingAction(false); setCoinVisible(true); sound('turn') }
+  function showStart(snapshot){ const normalized=normalizeRemoteGame(snapshot); setGame(normalized); setScreen('game'); setSelectedAction(null); setInputDraft({}); setWildSide('NOT'); setSolution(null); setRevealIndex(-1); setResolving(false); setSyncingAction(false); setCoinVisible(true); sound('turn') }
 
   function createHostSession(code,selectedMapId,{resumeGame=null}={}){
     const session=createHostPeer(code,{
@@ -236,8 +252,8 @@ export default function OnlineApp() {
     if(data.type==='lobby'){ mapRef.current=data.mapId; roomRef.current=data.roomCode||roomRef.current; setMapId(data.mapId); setRoomCode(roomRef.current); setScreen('lobby'); return }
     if(data.type==='start'){ showStart(data.game); return }
     if(data.type==='state'){
-      setGame(data.game); setScreen('game'); setSelectedAction(null); setSyncingAction(false); setError(''); if(data.meta?.deal)setDealPulse(); if(data.meta?.sound)sound(data.meta.sound)
-      if(data.game?.phase==='finished'){ setResolving(false); setSolution(data.game.result); setRevealIndex(999) }
+      const normalized=normalizeRemoteGame(data.game); setGame(normalized); setScreen('game'); setSelectedAction(null); setSyncingAction(false); setError(''); if(data.meta?.deal)setDealPulse(); if(data.meta?.sound)sound(data.meta.sound)
+      if(normalized?.phase==='finished'){ setResolving(false); setSolution(normalized.result); setRevealIndex(999) }
       return
     }
     if(data.type==='resolve')beginResolutionLocal(data.result)
