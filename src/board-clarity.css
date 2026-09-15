@@ -76,8 +76,8 @@
   content: '';
   position: absolute;
   top: 50%;
-  width: 10px;
-  height: 10px;
+  width: clamp(7px, .9vw, 10px);
+  height: clamp(7px, .9vw, 10px);
   border-radius: 50%;
   background: #29251f;
   border: 2px solid #f7efe3;
@@ -86,8 +86,8 @@
   pointer-events: none;
 }
 
-.input-node::after { right: -7px; }
-.output-node::before { left: -7px; }
+.input-node::after { right: 0; transform: translate(50%,-50%); }
+.output-node::before { left: 0; transform: translate(-50%,-50%); }
 
 /* Inputs read as sources: letter + hidden/value card on the left edge. */
 .input-node::before {
