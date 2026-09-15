@@ -74,6 +74,14 @@
   font-size: 10px;
 }
 .lobby-actions { display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
+.room-first-copy { color: #aaa397; font-size: 13px; line-height: 1.65; margin: 0 0 20px; }
+.map-selector-lobby { width: min(920px,100%); }
+.lobby-map-heading { display: flex; justify-content: space-between; align-items: end; gap: 12px; margin: 18px 0 12px; text-align: left; }
+.lobby-map-heading strong { color: #eee7dc; font-size: 15px; }
+.lobby-map-heading small { color: #8f887d; font-size: 10px; }
+.lobby-map-list { margin-bottom: 14px; }
+.lobby-host-actions { display: grid; grid-template-columns: .8fr 1.2fr; gap: 8px; }
+.lobby-host-actions .copy-invite { margin: 0; }
 
 .connection-chip:not(.live) { border-color: #755b35; color: #e0b96d; }
 .disconnect-banner { backdrop-filter: blur(8px); }
@@ -168,6 +176,10 @@
 .rematch-notice.waiting { display: flex; justify-content: center; align-items: center; gap: 8px; }
 .rematch-notice i { width: 7px; height: 7px; border-radius: 50%; background: #ffd24a; animation: online-sync-pulse 1s infinite; }
 .result-actions-online { display: grid!important; grid-template-columns: 1.4fr 1fr!important; gap: 8px!important; margin-top: 14px!important; }
+.host-result-actions { grid-template-columns: 1.3fr 1fr!important; }
+.host-result-actions > :last-child { grid-column: 1 / -1; background: transparent; color: #8d857a; }
+.choose-map-button { border-color: rgba(255,210,74,.55); color: #f1d56c; }
+.guest-result-actions { grid-template-columns: 1fr!important; }
 @keyframes result-burst-in { from { transform: scale(.2) rotate(-18deg); opacity: 0; } to { transform: scale(1) rotate(0); } }
 
 @keyframes online-sync-pulse { 70% { box-shadow: 0 0 0 8px rgba(255,210,74,0); } 100% { box-shadow: 0 0 0 0 rgba(255,210,74,0); } }
@@ -223,6 +235,8 @@
   .online-identity-strip { width: calc(100% - 12px); margin-top: 5px; }
   .online-identity-strip > span { padding: 8px 9px; grid-template-columns: auto 1fr; }
   .online-identity-strip em { grid-column: 2; }
+  .lobby-map-heading { display: grid; }
+  .lobby-host-actions { grid-template-columns: 1fr; }
   .online-result-card { padding: 22px 16px; border-radius: 20px; }
   .online-result-card h2 { margin-bottom: 12px; }
   .result-output-orb { width: 96px; height: 96px; margin-bottom: 12px!important; }

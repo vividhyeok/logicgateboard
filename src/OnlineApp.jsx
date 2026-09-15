@@ -53,32 +53,29 @@ function IdentityStrip({ playerId, role, roomCode }) {
 }
 
 function OnlineLanding({ onHost, onJoin, roomCode, setRoomCode }) {
-  const [level, setLevel] = useState(1)
-  const [selectedMap, setSelectedMap] = useState(MAPS.find((map) => map.level === 1)?.id)
-  const maps = MAPS.filter((map) => map.level === level)
-  useEffect(() => { if (!MAP_BY_ID[selectedMap] || MAP_BY_ID[selectedMap].level !== level) setSelectedMap(maps[0]?.id) }, [level])
   return <main className="online-landing">
     <header className="online-hero"><div><span>ONLINE 2 PLAYER</span><h1>PC · 태블릿 · 폰에서<br/><em>각자 자기 패로.</em></h1><p>한 명이 방을 만들고 코드를 공유하면 서로 다른 기기에서 바로 플레이할 수 있습니다.</p></div><div className="online-hero-tools"><a href="/" className="online-back-link">← 다른 게임 모드</a></div></header>
     <section className="online-connect-grid">
-      <div className="online-panel host-panel"><span className="eyebrow">HOST A GAME · PLAYER 1</span><h2>내가 방 만들기</h2><div className="online-level-tabs">{[1,2].map((item)=><button key={item} className={level===item?'active':''} onClick={()=>setLevel(item)}>LEVEL {item}</button>)}</div><div className="online-map-list">{maps.map((map)=><button key={map.id} className={selectedMap===map.id?'active':''} onClick={()=>setSelectedMap(map.id)}><div><MapPreview map={map}/></div><span><b>{map.code}</b>{map.name}</span></button>)}</div><button className="online-primary" onClick={()=>onHost(selectedMap)}>PLAYER 1로 방 만들기</button></div>
+      <div className="online-panel host-panel"><span className="eyebrow">HOST A GAME · PLAYER 1</span><h2>친구와 새 방 만들기</h2><p className="room-first-copy">먼저 방을 만든 뒤, 친구가 들어오면 함께 플레이할 맵을 고릅니다.</p><button className="online-primary" onClick={onHost}>PLAYER 1로 방 만들기</button></div>
       <div className="online-panel join-panel"><span className="eyebrow">JOIN A GAME · PLAYER 2</span><h2>친구 방 들어가기</h2><p>초대 링크를 열면 자동 접속됩니다. 코드만 받았다면 아래 6자리를 입력하세요.</p><label>ROOM CODE<input value={roomCode} onChange={(event)=>setRoomCode(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6))} placeholder="ABC234" maxLength={6} autoCapitalize="characters" inputMode="text"/></label><button className="online-primary secondary" disabled={roomCode.length < 6} onClick={()=>onJoin(roomCode)}>PLAYER 2로 입장하기</button><div className="online-note"><strong>재연결 지원</strong><span>잠깐 네트워크가 끊겨도 방과 마지막 게임 상태를 유지하고 같은 링크에서 재접속합니다.</span></div></div>
     </section>
   </main>
 }
 
-function Lobby({ role, playerId, roomCode, connected, connectionState, disconnectCount, mapId, error, onStart, onShare, onLeave }) {
+function Lobby({ role, playerId, roomCode, connected, connectionState, disconnectCount, mapId, error, onMapChange, onStart, onShare, onLeave }) {
+  const [level, setLevel] = useState(MAP_BY_ID[mapId]?.level || 1)
   const map = MAP_BY_ID[mapId]
+  const maps = MAPS.filter((item)=>item.level===level)
   const opponentId = 1 - playerId
   const stateText = connected ? `PLAYER ${opponentId + 1} CONNECTED` : connectionState === 'reconnecting' ? `PLAYER ${opponentId + 1} 재연결 대기 중` : `WAITING FOR PLAYER ${opponentId + 1}`
-  return <main className="online-lobby"><div className="lobby-card"><div className="lobby-status"><span className={connected?'dot live':'dot'}/>{stateText}</div><IdentityStrip playerId={playerId} role={role} roomCode={roomCode}/><span className="eyebrow">ONLINE ROOM CODE</span><h1>{roomCode}</h1>{map&&<div className="lobby-map"><div><MapPreview map={map}/></div><span>{map.code} · {map.name}</span></div>}{disconnectCount>0&&<div className="reconnect-note">연결 복구 중 · 게임은 그대로 유지됩니다.</div>}{role==='host'?<><p>함께 플레이할 사람에게 링크를 보내세요.</p><button className="copy-invite share-invite" onClick={onShare}>초대 링크 공유</button><button className="online-primary" disabled={!connected} onClick={onStart}>{connected?'게임 시작':'상대 접속 대기 중'}</button></>:<><p>{connected?'입장 완료. 방장이 게임을 시작할 때까지 기다려 주세요.':'방에 연결하는 중입니다.'}</p><div className="lobby-loader"><i/><i/><i/></div></>}{error&&<div className="online-error">{error}</div>}<div className="lobby-actions"><button className="text-exit" onClick={onLeave}>나가기</button></div></div></main>
+  return <main className="online-lobby"><div className={`lobby-card ${role==='host'?'map-selector-lobby':''}`}><div className="lobby-status"><span className={connected?'dot live':'dot'}/>{stateText}</div><IdentityStrip playerId={playerId} role={role} roomCode={roomCode}/><span className="eyebrow">ONLINE ROOM CODE</span><h1>{roomCode}</h1>{role==='host'?<><div className="lobby-map-heading"><strong>플레이할 맵 선택</strong><small>방장이 선택하면 상대 화면에도 바로 반영됩니다.</small></div><div className="online-level-tabs">{[1,2].map((item)=><button key={item} className={level===item?'active':''} onClick={()=>setLevel(item)}>LEVEL {item}</button>)}</div><div className="online-map-list lobby-map-list">{maps.map((item)=><button key={item.id} className={mapId===item.id?'active':''} onClick={()=>onMapChange(item.id)}><div><MapPreview map={item}/></div><span><b>{item.code}</b>{item.name}</span></button>)}</div><div className="lobby-host-actions"><button className="copy-invite share-invite" onClick={onShare}>초대 링크 공유</button><button className="online-primary" disabled={!connected} onClick={onStart}>{connected?`${map?.name} 시작`:'상대 접속 대기 중'}</button></div></>:<>{map&&<div className="lobby-map"><div><MapPreview map={map}/></div><span>{map.code} · {map.name}</span></div>}<p>{connected?'방장이 맵을 고르고 있습니다. 선택이 끝나면 자동으로 시작됩니다.':'방에 연결하는 중입니다.'}</p><div className="lobby-loader"><i/><i/><i/></div></>}{disconnectCount>0&&<div className="reconnect-note">연결 복구 중 · 방 상태는 그대로 유지됩니다.</div>}{error&&<div className="online-error">{error}</div>}<div className="lobby-actions"><button className="text-exit" onClick={onLeave}>나가기</button></div></div></main>
 }
 
 function WaitingPanel({ children }) { return <motion.div className="phase-panel online-waiting" initial={{opacity:0,y:12}} animate={{opacity:1,y:0}}><span className="eyebrow">OPPONENT ACTION</span><h2>{children}</h2><div className="loader-line"/></motion.div> }
 
-function OnlineResult({ game, playerId, role, rematchRequested, rematchStatus, onReplay, onMenu }) {
+function OnlineResult({ game, playerId, role, onReplay, onChooseMap, onMenu }) {
   const won = game.result?.winner === playerId
   const winner = game.result?.winner ?? 0
-  const waiting = role === 'guest' && rematchStatus === 'waiting'
   return createPortal(<motion.div className="online-result-overlay" role="dialog" aria-modal="true" aria-labelledby="online-result-title" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} transition={{duration:.28}}>
     <div className={`result-burst ${won?'win-burst':'lose-burst'}`}/>
     <motion.div className={`online-result-card ${won?'won':'lost'}`} initial={{scale:.76,y:42,rotateX:10}} animate={{scale:1,y:0,rotateX:0}} exit={{scale:.9,opacity:0}} transition={{type:'spring',stiffness:240,damping:21}}>
@@ -88,9 +85,7 @@ function OnlineResult({ game, playerId, role, rematchRequested, rematchStatus, o
       <div className="result-player-summary">
         {[0,1].map((id)=><motion.div key={id} className={`${winner===id?'winner':''} ${playerId===id?'is-me':''}`} initial={{opacity:0,x:id===0?-18:18}} animate={{opacity:1,x:0}} transition={{delay:.38+id*.08}}><span>{playerId===id?'YOU':`PLAYER ${id+1}`}</span><b>TARGET {game.players[id]?.target}</b><em>{winner===id?'WIN':'LOSE'}</em></motion.div>)}
       </div>
-      {role==='host'&&rematchRequested&&<motion.p className="rematch-notice" initial={{opacity:0,y:8}} animate={{opacity:1,y:0}}>상대가 재대결을 요청했습니다.</motion.p>}
-      {waiting&&<p className="rematch-notice waiting"><i/> 방장의 응답을 기다리는 중입니다.</p>}
-      <div className="result-actions-online"><button className="online-primary" onClick={onReplay} disabled={waiting}>{role==='host'?(rematchRequested?'재대결 수락':'새 게임 시작'):(waiting?'요청 보냄':'재대결 요청')}</button><button className="online-secondary-button" onClick={onMenu}>방 나가기</button></div>
+      {role==='host'?<div className="result-actions-online host-result-actions"><button className="online-primary" onClick={onReplay}>이 맵 다시 하기</button><button className="online-secondary-button choose-map-button" onClick={onChooseMap}>다른 맵 선택</button><button className="online-secondary-button" onClick={onMenu}>방 나가기</button></div>:<><p className="rematch-notice waiting"><i/> 방장이 다음 게임을 고르는 중입니다.</p><div className="result-actions-online guest-result-actions"><button className="online-secondary-button" onClick={onMenu}>방 나가기</button></div></>}
     </motion.div>
   </motion.div>, document.body)
 }
@@ -188,8 +183,9 @@ export default function OnlineApp() {
     return session
   }
 
-  function createRoom(selectedMapId){
+  function createRoom(){
     cleanup(); resetConnectionTracking()
+    const selectedMapId=MAPS[0].id
     const code=makeRoomCode(); roomRef.current=code; mapRef.current=selectedMapId
     setRole('host'); setPlayerId(0); setRoomCode(code); setMapId(selectedMapId); setScreen('lobby'); setConnected(false); setError('')
     setHostUrl(code); saveHostRecovery(null)
@@ -237,6 +233,21 @@ export default function OnlineApp() {
     sessionRef.current?.send({type:'start',game:snapshotForPlayer(next,1)})
   }
 
+  function selectLobbyMap(selectedMapId){
+    if(role!=='host'||!MAP_BY_ID[selectedMapId])return
+    mapRef.current=selectedMapId; setMapId(selectedMapId); saveHostRecovery(null)
+    sessionRef.current?.setMeta?.({mapId:selectedMapId,status:'lobby'})
+    sessionRef.current?.send({type:'lobby',mapId:selectedMapId,roomCode:roomRef.current})
+    sound('flip')
+  }
+
+  function chooseAnotherMap(){
+    if(role!=='host')return
+    clearTimers(); fullGameRef.current=null; setGame(null); setScreen('lobby'); setCoinVisible(false); setSolution(null); setRevealIndex(-1); setResolving(false); resolvingRef.current=false; saveHostRecovery(null)
+    sessionRef.current?.setMeta?.({mapId:mapRef.current,status:'lobby'})
+    sessionRef.current?.send({type:'lobby',mapId:mapRef.current,roomCode:roomRef.current})
+  }
+
   function handleHostData(data,messageId){
     if(!data||typeof data!=='object')return
     if(messageId&&handledCommandIdsRef.current.has(messageId))return
@@ -263,10 +274,6 @@ export default function OnlineApp() {
     } else if(data.command==='move'){
       const next=playMove(current,data.slotId,data.action); if(next!==current)hostCommit(next,{sound:'place'})
     } else if(data.command==='resolve') beginResolutionHost()
-    else if(data.command==='replay'){
-      if(current.phase!=='finished')return
-      setRematchRequested(true); sound('turn'); sessionRef.current?.send({type:'rematch-requested'})
-    }
   }
 
   function handleGuestData(data){
@@ -279,7 +286,6 @@ export default function OnlineApp() {
       return
     }
     if(data.type==='resolve')beginResolutionLocal(data.result)
-    if(data.type==='rematch-requested'){ setSyncingAction(false); setRematchStatus('waiting') }
   }
 
   function sendGuestCommand(command,values={}){
@@ -352,7 +358,6 @@ export default function OnlineApp() {
   function requestReplay(){
     if(connectionState==='closed')return
     if(role==='host')startMatch()
-    else if(rematchStatus!=='waiting'&&sendGuestCommand('replay'))setRematchStatus('sending')
   }
 
   async function shareInvite(){
@@ -374,7 +379,7 @@ export default function OnlineApp() {
   }
 
   if(screen==='landing')return <OnlineLanding onHost={createRoom} onJoin={joinRoom} roomCode={roomCode} setRoomCode={setRoomCode}/>
-  if(screen==='lobby'&&role&&playerId!==null)return <Lobby role={role} playerId={playerId} roomCode={roomCode} connected={connected} connectionState={connectionState} disconnectCount={disconnectCount} mapId={mapId} error={error} onStart={()=>startMatch()} onShare={shareInvite} onLeave={leave}/>
+  if(screen==='lobby'&&role&&playerId!==null)return <Lobby role={role} playerId={playerId} roomCode={roomCode} connected={connected} connectionState={connectionState} disconnectCount={disconnectCount} mapId={mapId} error={error} onMapChange={selectLobbyMap} onStart={()=>startMatch()} onShare={shareInvite} onLeave={leave}/>
   if(!game||playerId===null||!role)return null
 
   const me=game.players[playerId]
@@ -395,7 +400,7 @@ export default function OnlineApp() {
       <div className="current-area"><PlayerHand player={me} playerId={playerId} isCurrent={myTurn} selectedAction={selectedAction} wildSide={wildSide} onSelectAction={selectAction} onFlipWild={()=>{if(connectionState==='closed')return;setWildSide((side)=>side==='NOT'?'EMPTY':'NOT');sound('flip')}} onDragAction={handleDrag} dealing={dealing}/>{selectedAction&&myTurn&&<div className="placement-hint">카드를 빈 슬롯으로 끌거나 슬롯을 클릭하세요. <button onClick={()=>setSelectedAction(null)}>취소</button></div>}</div>
     </div>}
 
-    <AnimatePresence>{coinVisible&&<CoinOverlay winnerId={game.coinWinner} onDone={()=>setCoinVisible(false)}/>} {dealing&&<motion.div className="deal-banner" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}><span>SHUFFLE / DEAL</span><strong>{MAP_BY_ID[game.mapId].level===1?'4':'5'} CARDS EACH</strong></motion.div>} {game.phase==='finished'&&<OnlineResult game={game} playerId={playerId} role={role} rematchRequested={rematchRequested} rematchStatus={rematchStatus} onReplay={requestReplay} onMenu={leave}/>}</AnimatePresence>
+    <AnimatePresence>{coinVisible&&<CoinOverlay winnerId={game.coinWinner} onDone={()=>setCoinVisible(false)}/>} {dealing&&<motion.div className="deal-banner" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}><span>SHUFFLE / DEAL</span><strong>{MAP_BY_ID[game.mapId].level===1?'4':'5'} CARDS EACH</strong></motion.div>} {game.phase==='finished'&&<OnlineResult game={game} playerId={playerId} role={role} onReplay={requestReplay} onChooseMap={chooseAnotherMap} onMenu={leave}/>}</AnimatePresence>
     {!connected&&<div className="disconnect-banner">{connectionState==='closed'?'방이 종료되었습니다.':'연결이 불안정하지만 계속 선택할 수 있습니다. 행동은 연결이 돌아오면 자동 전달됩니다.'}</div>}
     {syncingAction&&connected&&<div className="sync-banner"><i/><span>상대 기기에 행동을 동기화하는 중…</span></div>}
     {copied&&<div className="copy-toast">초대 문구 · 방 코드 · 링크 복사됨</div>}
