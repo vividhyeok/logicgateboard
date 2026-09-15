@@ -1,4 +1,4 @@
-import { get, onDisconnect, onValue, ref, remove, serverTimestamp, set } from 'firebase/database'
+import { get, onChildAdded, onDisconnect, onValue, push, ref, remove, serverTimestamp, set, update } from 'firebase/database'
 import { getFirebaseDatabase } from './firebaseClient.js'
 
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -31,17 +31,19 @@ function roomRefs(db, code) {
     meta: ref(db, `${base}/meta`),
     hostOnline: ref(db, `${base}/presence/host`),
     guestOnline: ref(db, `${base}/presence/guest`),
-    toHost: ref(db, `${base}/messages/toHost`),
-    toGuest: ref(db, `${base}/messages/toGuest`),
+    guestCommands: ref(db, `${base}/messages/guestToHost`),
+    hostLatest: ref(db, `${base}/messages/hostToGuest/latest`),
+    infoConnected: ref(db, '.info/connected'),
   }
 }
 
-function writeMessage(targetRef, payload) {
-  return set(targetRef, {
-    id: messageId(),
-    sentAt: serverTimestamp(),
-    payload,
-  })
+function presenceValue(role) {
+  return { online: true, role, at: serverTimestamp() }
+}
+
+function isOnline(snapshot) {
+  const value = snapshot.val()
+  return value === true || value?.online === true
 }
 
 export function createHostPeer(code, handlers = {}) {
@@ -49,32 +51,51 @@ export function createHostPeer(code, handlers = {}) {
   const refs = roomRefs(db, code)
   let closed = false
   let connected = false
-  let lastGuestMessageId = null
   const unsubscribers = []
 
   ;(async () => {
     try {
-      await set(refs.meta, {
-        code: String(code).trim().toUpperCase(),
-        createdAt: serverTimestamp(),
-        transport: 'firebase-rtdb',
-      })
-      await set(refs.hostOnline, true)
-      onDisconnect(refs.hostOnline).remove()
-      onDisconnect(refs.root).remove()
+      const existing = await get(refs.meta)
+      if (!existing.exists()) {
+        await set(refs.meta, {
+          code: String(code).trim().toUpperCase(),
+          createdAt: serverTimestamp(),
+          transport: 'firebase-rtdb',
+          status: 'waiting',
+        })
+      } else {
+        await update(refs.meta, { transport: 'firebase-rtdb', lastHostSeenAt: serverTimestamp() })
+      }
+
+      unsubscribers.push(onValue(refs.infoConnected, async (snapshot) => {
+        if (closed || snapshot.val() !== true) return
+        try {
+          await set(refs.hostOnline, presenceValue('host'))
+          await onDisconnect(refs.hostOnline).remove()
+          handlers.onTransportReady?.()
+        } catch (error) {
+          if (!closed) handlers.onError?.(error)
+        }
+      }))
 
       unsubscribers.push(onValue(refs.guestOnline, (snapshot) => {
-        const next = snapshot.val() === true
+        const next = isOnline(snapshot)
         if (next && !connected) handlers.onConnected?.()
         if (!next && connected) handlers.onDisconnected?.()
         connected = next
       }))
 
-      unsubscribers.push(onValue(refs.toHost, (snapshot) => {
+      unsubscribers.push(onChildAdded(refs.guestCommands, async (snapshot) => {
         const message = snapshot.val()
-        if (!message?.id || message.id === lastGuestMessageId) return
-        lastGuestMessageId = message.id
-        handlers.onData?.(message.payload)
+        if (!message?.payload) {
+          try { await remove(snapshot.ref) } catch {}
+          return
+        }
+        try {
+          handlers.onData?.(message.payload)
+        } finally {
+          try { await remove(snapshot.ref) } catch {}
+        }
       }))
 
       handlers.onReady?.()
@@ -86,13 +107,30 @@ export function createHostPeer(code, handlers = {}) {
   return {
     send(data) {
       if (closed) return
-      writeMessage(refs.toGuest, data).catch((error) => handlers.onError?.(error))
+      set(refs.hostLatest, {
+        id: messageId(),
+        sentAt: serverTimestamp(),
+        payload: data,
+      }).catch((error) => handlers.onError?.(error))
     },
     connected() { return connected },
-    async destroy() {
+    async setMeta(values = {}) {
+      if (closed) return
+      await update(refs.meta, { ...values, updatedAt: serverTimestamp() })
+    },
+    async getMeta() {
+      const snapshot = await get(refs.meta)
+      return snapshot.val()
+    },
+    async closeRoom() {
       closed = true
       unsubscribers.forEach((unsubscribe) => unsubscribe())
       try { await remove(refs.root) } catch {}
+    },
+    async destroy() {
+      closed = true
+      unsubscribers.forEach((unsubscribe) => unsubscribe())
+      try { await remove(refs.hostOnline) } catch {}
     },
   }
 }
@@ -115,17 +153,35 @@ export function createGuestPeer(code, handlers = {}) {
         return
       }
 
-      await set(refs.guestOnline, true)
-      onDisconnect(refs.guestOnline).remove()
+      handlers.onMeta?.(roomSnapshot.val())
+
+      unsubscribers.push(onValue(refs.infoConnected, async (snapshot) => {
+        if (closed || snapshot.val() !== true) return
+        try {
+          await set(refs.guestOnline, presenceValue('guest'))
+          await onDisconnect(refs.guestOnline).remove()
+          handlers.onTransportReady?.()
+        } catch (error) {
+          if (!closed) handlers.onError?.(error)
+        }
+      }))
 
       unsubscribers.push(onValue(refs.hostOnline, (snapshot) => {
-        const next = snapshot.val() === true
+        const next = isOnline(snapshot)
         if (next && !connected) handlers.onConnected?.()
         if (!next && connected) handlers.onDisconnected?.()
         connected = next
       }))
 
-      unsubscribers.push(onValue(refs.toGuest, (snapshot) => {
+      unsubscribers.push(onValue(refs.meta, (snapshot) => {
+        if (!snapshot.exists()) {
+          if (!closed) handlers.onRoomClosed?.()
+          return
+        }
+        handlers.onMeta?.(snapshot.val())
+      }))
+
+      unsubscribers.push(onValue(refs.hostLatest, (snapshot) => {
         const message = snapshot.val()
         if (!message?.id || message.id === lastHostMessageId) return
         lastHostMessageId = message.id
@@ -139,9 +195,18 @@ export function createGuestPeer(code, handlers = {}) {
   return {
     send(data) {
       if (closed) return
-      writeMessage(refs.toHost, data).catch((error) => handlers.onError?.(error))
+      const target = push(refs.guestCommands)
+      set(target, {
+        id: messageId(),
+        sentAt: serverTimestamp(),
+        payload: data,
+      }).catch((error) => handlers.onError?.(error))
     },
     connected() { return connected },
+    async getMeta() {
+      const snapshot = await get(refs.meta)
+      return snapshot.val()
+    },
     async destroy() {
       closed = true
       unsubscribers.forEach((unsubscribe) => unsubscribe())
