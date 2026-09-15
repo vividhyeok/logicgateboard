@@ -8,6 +8,7 @@ import './base.css'
 import './cards.css'
 import './gate-symbols.css'
 import './game.css'
+import './board-clarity.css'
 import './launcher.css'
 
 const params = new URLSearchParams(window.location.search)
