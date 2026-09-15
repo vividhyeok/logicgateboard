@@ -1,6 +1,6 @@
 /* Online mode polish: keep private information private and make the table usable on phones/tablets. */
 .opponent-private {
-  width: min(460px, calc(100% - 20px));
+  width: min(520px, calc(100% - 20px));
   margin: 4px auto 8px;
   min-height: 54px;
   border: 1px solid #39352d;
@@ -26,6 +26,58 @@
 }
 .share-invite:hover { transform: translateY(-1px); filter: brightness(1.04); }
 
+.online-hero-tools { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; justify-content: flex-end; }
+.online-log-button {
+  border: 1px solid #474137;
+  background: #201d18;
+  color: #d7d0c4;
+  border-radius: 999px;
+  padding: 9px 12px;
+  font: 750 9px/1 'IBM Plex Mono', monospace;
+  letter-spacing: .04em;
+  cursor: pointer;
+}
+.online-log-button:disabled { opacity: .35; cursor: default; }
+.online-log-button:not(:disabled):hover { border-color: #766d5e; }
+
+.online-identity-strip {
+  width: min(760px, calc(100% - 20px));
+  margin: 8px auto 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  border: 1px solid #353129;
+  border-radius: 14px;
+  overflow: hidden;
+  background: rgba(24,22,18,.92);
+}
+.online-identity-strip > span {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-right: 1px solid #353129;
+}
+.online-identity-strip > span:last-child { border-right: 0; }
+.online-identity-strip small { color: #7e776c; font: 700 8px/1 'IBM Plex Mono', monospace; }
+.online-identity-strip b { color: #f0e9dd; font: 850 10px/1 'IBM Plex Mono', monospace; }
+.online-identity-strip em { color: #ffd24a; font: 800 8px/1 'IBM Plex Mono', monospace; font-style: normal; }
+.identity-room { min-width: 124px; }
+
+.reconnect-note {
+  margin: 8px 0 2px;
+  padding: 8px 10px;
+  border: 1px solid #544b3d;
+  border-radius: 10px;
+  color: #cfc6b7;
+  background: #1d1a16;
+  font-size: 10px;
+}
+.lobby-actions { display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
+
+.connection-chip:not(.live) { border-color: #755b35; color: #e0b96d; }
+.disconnect-banner { backdrop-filter: blur(8px); }
+
 .online-game-page .board-zone { min-width: 0; }
 .online-game-page .current-area { position: relative; z-index: 35; }
 .online-game-page .opponent-area { min-height: 62px; }
@@ -39,11 +91,14 @@
   .online-game-page .board-frame { min-width: 740px; }
   .online-game-page .logic-card { width: 72px; }
   .online-game-page .hand-fan { min-height: 124px; padding-left: 4px; padding-right: 4px; }
+  .online-identity-strip { grid-template-columns: 1fr 1fr; }
+  .online-identity-strip .identity-room { grid-column: 1 / -1; border-top: 1px solid #353129; border-right: 0; }
 }
 
 @media (max-width: 640px) {
   .online-hero { margin-bottom: 16px; }
   .online-hero p { font-size: 12px; line-height: 1.6; }
+  .online-hero-tools { justify-content: flex-start; }
   .online-panel { padding: 16px; border-radius: 17px; }
   .online-panel h2 { font-size: 22px; }
   .online-level-tabs { overflow-x: auto; }
@@ -51,7 +106,7 @@
   .lobby-card { padding: 20px 15px; border-radius: 20px; }
   .lobby-card h1 { font-size: clamp(46px, 16vw, 72px); letter-spacing: .07em; }
   .online-game-bar { position: sticky; top: 0; z-index: 80; background: rgba(17,16,13,.93); backdrop-filter: blur(8px); padding: 6px 0; }
-  .online-game-bar div:nth-child(2) strong { font-size: 11px; }
+  .online-game-bar div:nth-child(2) strong { font-size: 9px; line-height: 1.45; }
   .status-row { position: sticky; top: 50px; z-index: 70; background: rgba(17,16,13,.90); backdrop-filter: blur(7px); padding-bottom: 6px; }
   .online-game-page .board-frame { min-width: 700px; }
   .online-game-page .logic-card { width: 64px; }
@@ -62,6 +117,9 @@
   .phase-panel { margin-left: 8px; margin-right: 8px; }
   .target-choice-grid { gap: 8px; }
   .disconnect-banner,.copy-toast { max-width: calc(100% - 24px); width: max-content; text-align: center; }
+  .online-identity-strip { width: calc(100% - 12px); margin-top: 5px; }
+  .online-identity-strip > span { padding: 8px 9px; grid-template-columns: auto 1fr; }
+  .online-identity-strip em { grid-column: 2; }
 }
 
 @media (orientation: portrait) and (max-width: 700px) {
