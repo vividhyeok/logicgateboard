@@ -156,7 +156,8 @@
 .signal-dot,
 .board-wire-signal,
 .wire-label,
-.wire-label-bg {
+.wire-label-bg,
+.result-output-orb small {
   display: none !important;
 }
 
