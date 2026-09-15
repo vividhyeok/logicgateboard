@@ -176,6 +176,7 @@ export default function OnlineApp() {
     setRole('guest'); setPlayerId(1); setRoomCode(code); setScreen('lobby'); setConnected(false); setError('')
     const session=createGuestPeer(code,{
       onConnected:()=>{ markConnected(); session.send({type:'hello'}) },
+      onTransportReady:()=>session.send({type:'hello'}),
       onDisconnected:markDisconnected,
       onError:markError,
       onMeta:(meta)=>{ if(meta?.mapId){ mapRef.current=meta.mapId; setMapId(meta.mapId) } },

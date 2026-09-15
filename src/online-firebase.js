@@ -207,7 +207,6 @@ export function createGuestPeer(code, handlers = {}) {
   let presenceTimer = null
   let lastHostHeartbeat = 0
   let lastHostMessageId = null
-  let pendingHostPayload = null
   const unsubscribers = []
   const pendingCommands = new Map()
 
@@ -225,13 +224,6 @@ export function createGuestPeer(code, handlers = {}) {
     }).catch((error) => { if (!closed) handlers.onError?.(error) })
   }
 
-  function deliverPendingHostPayload() {
-    if (!connected || !pendingHostPayload) return
-    const payload = pendingHostPayload
-    pendingHostPayload = null
-    handlers.onData?.(payload)
-  }
-
   function applyHostPresence(next) {
     if (closed) return
     if (next) {
@@ -240,7 +232,6 @@ export function createGuestPeer(code, handlers = {}) {
         connected = true
         handlers.onConnected?.()
       }
-      deliverPendingHostPayload()
       return
     }
     if (!connected || disconnectTimer) return
@@ -299,10 +290,6 @@ export function createGuestPeer(code, handlers = {}) {
         const message = snapshot.val()
         if (!message?.id || message.id === lastHostMessageId) return
         lastHostMessageId = message.id
-        if (!connected) {
-          pendingHostPayload = message.payload
-          return
-        }
         handlers.onData?.(message.payload)
       }))
 
