@@ -205,10 +205,23 @@ export function createGuestPeer(code, handlers = {}) {
   let disconnectTimer = null
   let heartbeatTimer = null
   let presenceTimer = null
+  let hostPollTimer = null
   let lastHostHeartbeat = 0
   let lastHostMessageId = null
   const unsubscribers = []
   const pendingCommands = new Map()
+
+  function applyHostMessage(snapshot) {
+    const message = snapshot.val()
+    if (!message?.id || message.id === lastHostMessageId) return
+    lastHostMessageId = message.id
+    handlers.onData?.(message.payload)
+  }
+
+  function pollLatestHostState() {
+    if (closed) return
+    get(refs.hostLatest).then(applyHostMessage).catch(() => {})
+  }
 
   function stopPending(id) {
     const pending = pendingCommands.get(id)
@@ -286,12 +299,11 @@ export function createGuestPeer(code, handlers = {}) {
         handlers.onMeta?.(snapshot.val())
       }))
 
-      unsubscribers.push(onValue(refs.hostLatest, (snapshot) => {
-        const message = snapshot.val()
-        if (!message?.id || message.id === lastHostMessageId) return
-        lastHostMessageId = message.id
-        handlers.onData?.(message.payload)
-      }))
+      unsubscribers.push(onValue(refs.hostLatest, applyHostMessage))
+      hostPollTimer = window.setInterval(pollLatestHostState, 1500)
+      const onVisible = () => { if (document.visibilityState === 'visible') pollLatestHostState() }
+      document.addEventListener('visibilitychange', onVisible)
+      unsubscribers.push(() => document.removeEventListener('visibilitychange', onVisible))
 
       unsubscribers.push(onChildAdded(refs.guestAcks, (snapshot) => {
         stopPending(snapshot.key)
@@ -329,6 +341,7 @@ export function createGuestPeer(code, handlers = {}) {
       disconnectTimer = clearDisconnectTimer(disconnectTimer)
       if (heartbeatTimer) window.clearInterval(heartbeatTimer)
       if (presenceTimer) window.clearInterval(presenceTimer)
+      if (hostPollTimer) window.clearInterval(hostPollTimer)
       pendingCommands.forEach(({ timer }) => window.clearInterval(timer))
       pendingCommands.clear()
       unsubscribers.forEach((unsubscribe) => unsubscribe())
