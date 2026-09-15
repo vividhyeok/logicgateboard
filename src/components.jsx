@@ -61,14 +61,19 @@ export function WildCard({ playerId, side = 'NOT', compact = false, selected = f
   )
 }
 
-function BoardInputCard({ id, value, owner, reveal }) {
+function SignalDot({ value }) {
+  return <motion.span className={`signal-dot signal-${value}`} initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring', stiffness: 460, damping: 24 }}>{value}</motion.span>
+}
+
+function BoardInputCard({ id, value, owner, reveal, activeSignal }) {
   const shown = reveal ? value : null
   return <motion.div className={`board-value-card input-value-card owner-${owner + 1}`} animate={{ rotateY: shown === null ? 180 : 0 }} transition={{ duration: 0.3 }} aria-label={`입력 ${id}`}>
     <div className="value-card-inner"><div className="value-card-front"><span>{id}</span><strong>{shown ?? '?'}</strong></div><div className="value-card-back"><span>{id}</span><strong>?</strong></div></div>
+    {activeSignal !== undefined && <SignalDot value={activeSignal}/>} 
   </motion.div>
 }
-function OutputCard({ value, revealed }) {
-  return <motion.div className="board-value-card output-value-card" animate={{ rotateY: revealed ? 0 : 180 }} transition={{ duration: 0.36 }} aria-label="최종 결과"><div className="value-card-inner"><div className="value-card-front"><strong>{revealed ? value : '?'}</strong></div><div className="value-card-back"><strong>?</strong></div></div></motion.div>
+function OutputCard({ value, revealed, activeSignal }) {
+  return <motion.div className="board-value-card output-value-card" animate={{ rotateY: revealed ? 0 : 180 }} transition={{ duration: 0.36 }} aria-label="최종 결과"><div className="value-card-inner"><div className="value-card-front"><strong>{revealed ? value : '?'}</strong></div><div className="value-card-back"><strong>?</strong></div></div>{activeSignal !== undefined && <SignalDot value={activeSignal}/>}</motion.div>
 }
 
 export function MapPreview({ map }) {
@@ -78,29 +83,50 @@ export function MapPreview({ map }) {
   </svg>
 }
 
-export function GameBoard({ map, game, viewerId, selectedAction, onSlotClick, revealAllInputs = false, solution = null, resolving = false }) {
+export function GameBoard({ map, game, viewerId, selectedAction, onSlotClick, revealAllInputs = false, solution = null, revealIndex = -1, resolving = false }) {
   const [focusedNode, setFocusedNode] = useState(null)
   const legalSlots = selectedAction ? legalSlotIds(game, selectedAction) : []
-  const outputRevealed = solution?.output !== undefined
+  const revealNodeIndex = solution?.revealOrder ? Object.fromEntries(solution.revealOrder.map((id,index)=>[id,index])) : {}
+  const nodeRevealed = (nodeId, type) => {
+    if (!solution) return false
+    if (type === 'input') return revealAllInputs
+    const index = revealNodeIndex[nodeId]
+    return index !== undefined && revealIndex >= index
+  }
   return (
     <motion.section className="board-frame" initial={{ opacity: 0, scale: 0.94, rotateX: 9 }} animate={{ opacity: 1, scale: 1, rotateX: 0 }} transition={{ type: 'spring', stiffness: 170, damping: 22 }}>
-      <div className={`board-canvas ${focusedNode ? 'has-node-focus' : ''}`} data-resolving={resolving ? 'true' : 'false'}>
+      <div className={`board-canvas ${focusedNode ? 'has-node-focus' : ''} ${resolving ? 'is-resolving' : ''}`} data-resolving={resolving ? 'true' : 'false'}>
         <svg className="board-wires" viewBox="0 0 1000 520" preserveAspectRatio="none" aria-hidden="true">
-          {map.edges.map((edge) => { const [from,to] = edge; const related = focusedNode && (from === focusedNode || to === focusedNode); const path = wirePath(map,edge); return <g key={edge.join('-')} data-from={from} data-to={to} className={`wire-group ${related ? 'is-related' : ''}`}><path d={path} className="board-wire-outline"/><path d={path} className="board-wire-base"/></g> })}
+          <defs><filter id="wireGlow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+          {map.edges.map((edge) => {
+            const [from,to] = edge
+            const toNode = map.nodes.find((node)=>node.id===to)
+            const related = focusedNode && (from === focusedNode || to === focusedNode)
+            const active = solution && toNode && nodeRevealed(to,toNode.type)
+            const value = solution?.signals?.[from]
+            const path = wirePath(map,edge)
+            return <g key={edge.join('-')} data-from={from} data-to={to} className={`wire-group ${related ? 'is-related' : ''} ${active ? 'active' : ''}`}>
+              <path d={path} className="board-wire-outline"/><path d={path} className="board-wire-base"/>
+              {active && value !== undefined && <motion.path key={`${from}-${to}-${revealIndex}`} d={path} className={`board-wire-signal signal-path-${value}`} initial={{pathLength:0,opacity:.25}} animate={{pathLength:1,opacity:1}} transition={{duration:.42,ease:'easeInOut'}}/>}
+            </g>
+          })}
         </svg>
         {map.nodes.map((node) => {
           const style = { left: `${node.x / 10}%`, top: `${node.y / 5.2}%` }
           const owner = node.type === 'input' ? inputOwner(game,node.id) : null
           const inputValue = node.type === 'input' ? visibleInputValue(game,node.id,viewerId,revealAllInputs) : null
+          const signalVisible = nodeRevealed(node.id,node.type)
+          const signal = signalVisible ? solution?.signals?.[node.id] : undefined
           const focusProps = { onPointerEnter: () => setFocusedNode(node.id), onPointerLeave: () => setFocusedNode(null), onFocus: () => setFocusedNode(node.id), onBlur: () => setFocusedNode(null) }
           if (node.type === 'input') {
             const ownedValue = owner === viewerId ? game.players[owner]?.inputValues?.[node.id] : undefined
-            return <div key={node.id} data-node-id={node.id} className={`board-node input-node ${focusedNode === node.id ? 'is-focused' : ''}`} style={style} {...focusProps}><BoardInputCard id={node.id} value={inputValue ?? ownedValue} owner={owner} reveal={inputValue !== null || revealAllInputs}/></div>
+            return <div key={node.id} data-node-id={node.id} className={`board-node input-node ${focusedNode === node.id ? 'is-focused' : ''}`} style={style} {...focusProps}><BoardInputCard id={node.id} value={inputValue ?? ownedValue} owner={owner} reveal={inputValue !== null || revealAllInputs} activeSignal={signal}/></div>
           }
-          if (node.type === 'output') return <div key={node.id} data-node-id={node.id} className={`board-node output-node ${focusedNode === node.id ? 'is-focused' : ''}`} style={style} {...focusProps}><OutputCard value={solution?.output} revealed={outputRevealed}/></div>
+          if (node.type === 'output') return <div key={node.id} data-node-id={node.id} className={`board-node output-node ${focusedNode === node.id ? 'is-focused' : ''}`} style={style} {...focusProps}><OutputCard value={solution?.output} revealed={signalVisible} activeSignal={signal}/></div>
           const placement = game.placements?.[node.id]; const legal = legalSlots.includes(node.id)
-          return <button key={node.id} type="button" data-slot-id={node.id} data-node-id={node.id} className={`board-node card-slot ${node.type === 'wild' ? 'wild-slot' : ''} ${legal ? 'legal' : ''} ${placement ? 'filled' : ''} ${focusedNode === node.id ? 'is-focused' : ''}`} style={style} onClick={() => legal && onSlotClick(node.id)} disabled={!legal && !placement} {...focusProps}>
+          return <button key={node.id} type="button" data-slot-id={node.id} data-node-id={node.id} className={`board-node card-slot ${node.type === 'wild' ? 'wild-slot' : ''} ${legal ? 'legal' : ''} ${placement ? 'filled' : ''} ${focusedNode === node.id ? 'is-focused' : ''} ${signalVisible ? 'signal-resolved' : ''}`} style={style} onClick={() => legal && onSlotClick(node.id)} disabled={!legal && !placement} {...focusProps}>
             {!placement ? <div className="slot-print" aria-hidden="true"/> : placement.kind === 'gate' ? <GateCard card={{id:placement.cardId,type:placement.cardType}} compact owner={placement.playerId} layoutId={`card-${placement.cardId}`}/> : <WildCard playerId={placement.playerId} side={placement.cardType} compact/>}
+            {signal !== undefined && <SignalDot value={signal}/>} 
           </button>
         })}
       </div>
@@ -129,5 +155,5 @@ export function DeckStack({ count, dealing }) { return <div className={`deck-sta
 export function TurnCurtain({ playerId, onReady }) { return <motion.div className="turn-curtain" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}><motion.div className={`turn-curtain-card player-${playerId+1}`} initial={{scale:.88,y:24}} animate={{scale:1,y:0}} exit={{scale:.92,y:-16}}><span>기기 넘기기</span><strong>플레이어 {playerId+1}</strong><p>상대가 보지 않도록 화면을 넘겨주세요.</p><button type="button" onClick={onReady}>준비됨</button></motion.div></motion.div> }
 export function CoinOverlay({ winnerId, viewerId=null, onDone }) { const firstPlayerId=1-winnerId; const name=(id)=>viewerId===null?`플레이어 ${id+1}`:(id===viewerId?'당신':'상대'); return <motion.div className="coin-overlay" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}><motion.div className={`coin player-${winnerId+1}`} initial={{rotateY:0,y:-80,scale:.5}} animate={{rotateY:1080,y:0,scale:1}} transition={{duration:1.05,ease:[.2,.7,.2,1]}}>{viewerId===null?winnerId+1:(winnerId===viewerId?'나':'상대')}</motion.div><motion.div className="coin-copy" initial={{opacity:0,y:12}} animate={{opacity:1,y:0}} transition={{delay:.72}}><span>순서 정하기</span><strong>{name(winnerId)}이 목표를 고릅니다.</strong><small>{name(firstPlayerId)}이 먼저 카드를 놓습니다.</small><button type="button" onClick={onDone}>확인</button></motion.div></motion.div> }
 export function TargetChoice({ playerId, personal=false, onChoose }) { return <motion.div className="phase-panel" initial={{opacity:0,y:24}} animate={{opacity:1,y:0}}><span className="eyebrow">목표 선택</span><h2>{personal?'원하는 결과를 고르세요.':`플레이어 ${playerId+1}, 원하는 결과를 고르세요.`}</h2><div className="target-choice-grid">{[0,1].map((value)=><button key={value} className={`target-choice value-${value}`} onClick={()=>onChoose(value)}><span>내 목표</span><strong>{value}</strong></button>)}</div></motion.div> }
-export function InputChoice({ game, playerId, personal=false, draft, onChange, onSubmit }) { const assigned=game.players[playerId].assignedInputs; const complete=assigned.every((id)=>draft[id]!==undefined); return <motion.div className={`phase-panel input-phase player-panel-${playerId+1}`} initial={{opacity:0,y:24}} animate={{opacity:1,y:0}}><span className="eyebrow">비밀 입력</span><h2>{personal?'내 입력을 정하세요.':`플레이어 ${playerId+1}의 입력을 정하세요.`}</h2><div className="input-choice-grid">{assigned.map((id)=><div key={id} className="input-choice-row"><strong>{id}</strong><div>{[0,1].map((value)=><button key={value} className={draft[id]===value?'active':''} onClick={()=>onChange(id,value)}>{value}</button>)}</div></div>)}</div><button className="primary-button" type="button" disabled={!complete} onClick={onSubmit}>확정</button></motion.div> }
+export function InputChoice({ game, playerId, personal=false, draft, onChange, onSubmit }) { const assigned=game.players[playerId].assignedInputs; const complete=assigned.every((id)=>draft[id]!==undefined); return <motion.div className={`phase-panel input-phase player-panel-${playerId+1}`} initial={{opacity:0,y:24}} animate={{opacity:1,y:0}}><span className="eyebrow">비밀 입력</span><h2>{personal?'내 입력을 정하세요.':`플레이어 ${playerId+1}의 입력을 정하세요.`}</h2><div className="input-choice-grid">{assigned.map((id)=><div key={id} className="input-choice-row"><strong>{id}</strong><div>{[0,1].map((value)=><button key={value} className={draft[id]===value?'active':''} onClick={()=>onChange(id,value)}>{value}</button>)}</div></div><button className="primary-button" type="button" disabled={!complete} onClick={onSubmit}>확정</button></motion.div> }
 export function ResultOverlay({ game, onReplay, onMenu, onNewSeed }) { const won=(game.result?.winner??0)===0; return <motion.div className="result-overlay" initial={{opacity:0}} animate={{opacity:1}}><motion.div className={`result-card player-${won?1:2}`} initial={{y:45,scale:.9}} animate={{y:0,scale:1}} transition={{type:'spring',stiffness:230,damping:22}}><div className="result-output"><span>결과</span><strong>{game.result?.output}</strong></div><h2>{won?'승리했습니다!':'상대가 이겼습니다'}</h2><div className="result-actions"><button onClick={onReplay}>같은 판 다시</button><button onClick={onNewSeed}>새 판</button><button onClick={onMenu}>맵 선택</button></div></motion.div></motion.div> }
