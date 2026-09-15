@@ -1,62 +1,58 @@
-# Logic Gate Duel — Web Playtest
+# Logic Gate Duel — Digital Playtest Table
 
-기존 Python/Pygame `Logic Gate Duel` 프로토타입의 핵심 규칙을 브라우저로 옮긴 **무의존성(static HTML/CSS/JS) 플레이테스트 버전**입니다.
+실물 **Logic Gate Duel**을 제작하기 전에 6개 회로 맵의 흐름, 카드 손맛, 선·후공 밸런스를 직접 확인하기 위한 웹 플레이테스트 버전입니다.
 
-## 포함된 것
+## 핵심
 
-- Level 1 / Level 2의 6개 맵 전체
-- Gate Deck: AND / NAND / OR / NOR / XOR 각 4장, 총 20장
+- Level 1/2의 6개 맵 구현
+- 20장 Gate Deck: AND/NAND/OR/NOR/XOR 각 4장
 - Level 1 손패 4장 / Level 2 손패 5장
-- 플레이어별 Wild 1장: NOT / EMPTY 양면 개념
-- 동전 승자 목표 OUTPUT 선택, 패자는 선공
-- 플레이어별 INPUT 위치 무작위 배정 + 비공개 0/1 선택
-- 양쪽 Gate 손패와 배치 카드는 공개
-- **2P Pass & Play**: 매 턴 화면 넘김 가림 화면 포함
-- **VS CPU**: 혼자 규칙과 맵 흐름을 빠르게 확인하는 경량 Monte Carlo CPU
-- 마지막 INPUT 공개 → 회로 신호가 순서대로 흐르는 애니메이션 → OUTPUT/승자 판정
-- 브라우저 `localStorage`에 플레이테스트 결과 자동 저장
-- 결과 화면에서 템포 / 체감 밸런스 / 메모 기록
-- 메인 화면에서 전체 테스트 기록을 JSON으로 내보내기
+- 양면 Wild: NOT / EMPTY
+- 2P Pass & Play, VS CPU
+- 비밀 INPUT 설정과 턴별 가림 화면
+- 공개 손패, 카드 드래그 & 드롭, 슬롯 스냅
+- 카드 딜링 / Wild flip / 회로 신호 / 결과 애니메이션
+- 브라우저 내 플레이테스트 기록 및 JSON 내보내기
+- Web Audio 기반 경량 효과음, 전체화면 지원
 
-## 디자인 방향
+## Stack
 
-실물 제작 전 카드게임의 손맛을 확인하기 위한 버전입니다.
+- React 18
+- Vite 5
+- Framer Motion
+- 별도 백엔드 없음
 
-- UNO류 카드게임에서 느껴지는 **강한 단색, 큰 중앙 심볼, 모서리 라벨, 대각선 타원형 그래픽 문법**을 참고
-- 특정 상표/로고를 복제하지 않고, **표준 논리게이트 기호 자체**를 카드의 핵심 그래픽으로 사용
-- 맵은 기존 회로 배치를 유지하고, 실제 카드가 회로 슬롯에 올라가는 감각을 우선
-
-## 로컬 실행
-
-빌드가 필요 없습니다. 폴더를 정적 서버로 열면 됩니다.
+## Local
 
 ```bash
-python -m http.server 5173
+npm install
+npm run dev
 ```
 
-그 뒤 `http://localhost:5173` 접속.
+빌드:
+
+```bash
+npm run build
+npm run preview
+```
 
 ## Vercel
 
-이 저장소를 Vercel에서 Import하면 됩니다.
+저장소를 Vercel에 Import하면 Vite 프로젝트로 자동 감지됩니다.
 
-- Framework Preset: **Other**
-- Build Command: **비워두기**
-- Output Directory: **비워두기**
-- 환경 변수: 없음
+- Build Command: `npm run build`
+- Output Directory: `dist`
 
-`vercel.json`을 포함했고, 별도 서버/DB/API가 없습니다.
+## 플레이 규칙
 
-## 원본 Pygame에서 유지한 규칙
+1. 코인 토스로 목표 OUTPUT 선택권을 결정합니다.
+2. 목표를 고른 플레이어의 상대가 선공입니다.
+3. 각 플레이어는 자신에게 배정된 INPUT 값을 비밀리에 정합니다.
+4. Gate Deck에서 번갈아 카드를 받아 손패를 구성합니다.
+5. 매 턴 Gate 카드 또는 아직 쓰지 않은 Wild를 빈 슬롯 하나에 놓습니다.
+6. 모든 슬롯이 채워지면 INPUT을 공개하고 회로를 실행합니다.
+7. 최종 OUTPUT이 자신의 목표값과 같은 플레이어가 승리합니다.
 
-- Gate = 2-input / 1-output
-- Wild = 1-input / 1-output
-- Level 1 = Gate 3 + Wild 1 = 4 slots = 각 플레이어 2번 행동
-- Level 2 = Gate 5 + Wild 1 = 6 slots = 각 플레이어 3번 행동
-- shared Gate Deck을 P1 → P2 순서로 번갈아 배분
-- Wild 사용도 한 턴을 완전히 소비
-- 상대 INPUT만 카드 배치 종료 전까지 비공개
+## 디자인 방향
 
-## CPU에 대해
-
-웹 버전 CPU는 **빠른 실제 플레이테스트 편의용**입니다. 원본 Python의 Belief AI 전체를 1:1 포팅하지 않고, 상대 INPUT을 모르는 상태에서 가능한 값을 샘플링하여 후보 수를 Monte Carlo로 비교합니다. 실제 밸런스 판단은 `2P Pass & Play` 기록을 우선하는 것을 권장합니다.
+웹 UI가 실물 프로토타입의 감각을 최대한 반영하도록 구성했습니다. 보드는 오프화이트 인쇄물/접이식 보드 질감, 카드는 강한 단색과 큰 논리게이트 기호를 사용하는 대중적인 카드게임 문법으로 설계했습니다. 특정 상용 카드 디자인을 복제하지 않고 논리게이트 식별성을 우선합니다.
