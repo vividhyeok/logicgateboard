@@ -41,6 +41,13 @@
   filter: drop-shadow(0 5px 10px rgba(42,35,28,.22));
 }
 
+/* Resolution is visual only: inactive paths recede while solved paths fill with their 0/1 signal. */
+.board-canvas.is-resolving .wire-group { opacity: .22; }
+.board-canvas.is-resolving .wire-group.active { opacity: 1; }
+.board-canvas.is-resolving .wire-group.active .board-wire-base { opacity: .34; }
+.board-canvas.is-resolving .card-slot.signal-resolved { z-index: 8; }
+.board-canvas.is-resolving .card-slot.signal-resolved .logic-card { filter: saturate(1.08) brightness(1.03); }
+
 /* Keep rendered card size proportional to the same 1000x520 coordinate system as the SVG. */
 .card-slot {
   min-width: 0 !important;
@@ -159,10 +166,8 @@
 }
 .slot-print > * { display: none !important; }
 
-/* Intermediate calculation annotations are intentionally absent; only the final result flips. */
+/* No explanatory overlay: only the actual board state animates. */
 .circuit-trace,
-.signal-dot,
-.board-wire-signal,
 .wire-label,
 .wire-label-bg,
 .result-output-orb small {
