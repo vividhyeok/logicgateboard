@@ -72,6 +72,25 @@ function OutputCard({ value, revealed }) {
   return <motion.div className="board-value-card output-value-card" animate={{ rotateY: revealed ? 0 : 180 }} transition={{ duration: 0.5 }}><div className="value-card-inner"><div className="value-card-front"><span>OUTPUT</span><strong>{revealed ? value : '?'}</strong></div><div className="value-card-back"><span>OUTPUT</span><strong>?</strong></div></div></motion.div>
 }
 
+function CircuitTrace({ map, game, solution, revealIndex }) {
+  if (!solution || revealIndex < 0) return <div className="circuit-trace is-starting"><span>회로 자동 계산</span><strong>비밀 INPUT을 공개하고 신호를 추적합니다…</strong></div>
+  const nodeId = solution.revealOrder[Math.min(revealIndex, solution.revealOrder.length - 1)]
+  const node = map.nodes.find((item) => item.id === nodeId)
+  if (!node) return null
+  const sources = map.edges.filter(([,to]) => to === nodeId).map(([from]) => from)
+  const values = sources.map((id) => solution.signals[id])
+  const result = solution.signals[nodeId]
+  const operation = node.type === 'gate' ? game.placements?.[nodeId]?.cardType : node.type === 'wild' ? game.placements?.[nodeId]?.cardType : 'OUTPUT'
+  const expression = node.type === 'output'
+    ? `${sources[0]}의 ${values[0]}이 최종 OUTPUT으로 전달`
+    : `${sources.map((id,index) => `${id}(${values[index]})`).join(' + ')} → ${operation} → ${result}`
+  return <motion.div key={nodeId} className={`circuit-trace signal-${result}`} initial={{opacity:0,y:10}} animate={{opacity:1,y:0}}>
+    <span>STEP {Math.min(revealIndex + 1, solution.revealOrder.length)} / {solution.revealOrder.length} · {nodeId}</span>
+    <strong>{expression}</strong>
+    <small>{result === 1 ? 'HIGH · 1 신호가 다음 노드로 이동합니다.' : 'LOW · 0 신호가 다음 노드로 이동합니다.'}</small>
+  </motion.div>
+}
+
 export function MapPreview({ map }) {
   return <svg className="map-preview-svg" viewBox="0 0 1000 520" aria-hidden="true">
     {map.edges.map((edge) => <path key={edge.join('-')} d={wirePath(map, edge)} className="preview-wire" />)}
@@ -87,6 +106,7 @@ export function GameBoard({ map, game, viewerId, selectedAction, onSlotClick, re
     <motion.section className="board-frame" initial={{ opacity: 0, scale: 0.94, rotateX: 9 }} animate={{ opacity: 1, scale: 1, rotateX: 0 }} transition={{ type: 'spring', stiffness: 170, damping: 22 }}>
       <div className="board-print-header"><div><span>LOGIC GATE DUEL</span><strong>{map.code} · {map.name}</strong></div><div className="board-print-meta">CIRCUIT MAP / {map.level === 1 ? 'BASIC' : 'ADVANCED'}</div></div>
       <div className="board-canvas" data-resolving={resolving ? 'true' : 'false'}>
+        <AnimatePresence>{resolving && <CircuitTrace map={map} game={game} solution={solution} revealIndex={revealIndex}/>}</AnimatePresence>
         <svg className="board-wires" viewBox="0 0 1000 520" preserveAspectRatio="none" aria-hidden="true">
           <defs><filter id="wireGlow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
           {map.edges.map((edge) => { const [from,to] = edge; const toNode = map.nodes.find((node) => node.id === to); const active = solution && nodeRevealed(to,toNode.type); const value = solution?.signals?.[from]; const path = wirePath(map,edge); return <g key={edge.join('-')}><path d={path} className="board-wire-base"/><AnimatePresence>{active && value !== undefined && <motion.path d={path} className={`board-wire-signal signal-path-${value}`} initial={{pathLength:0,opacity:.25}} animate={{pathLength:1,opacity:1}} exit={{opacity:0}} transition={{duration:.48,ease:'easeInOut'}}/>}</AnimatePresence></g> })}

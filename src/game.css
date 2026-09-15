@@ -74,6 +74,13 @@
 .board-wire-signal { fill: none; stroke-width: 6; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; filter: url(#wireGlow); }
 .signal-path-1 { stroke: #f3bf20; }
 .signal-path-0 { stroke: #438fe8; }
+.circuit-trace { position: absolute; z-index: 32; left: 50%; top: 10px; transform: translateX(-50%); width: min(520px,calc(100% - 24px)); min-height: 58px; padding: 10px 14px; border: 1px solid rgba(42,38,32,.28); border-radius: 13px; background: rgba(18,16,13,.92); color: #f4eee4; box-shadow: 0 10px 30px rgba(0,0,0,.24); text-align: center; pointer-events: none; backdrop-filter: blur(8px); }
+.circuit-trace span { display: block; color: var(--yellow); font: 800 8px/1 'IBM Plex Mono'; letter-spacing: .11em; }
+.circuit-trace strong { display: block; margin-top: 6px; font: 800 clamp(11px,1.5vw,15px)/1.25 'IBM Plex Mono'; }
+.circuit-trace small { display: block; margin-top: 5px; color: #b8afa3; font-size: 9px; }
+.circuit-trace.signal-0 { border-color: rgba(67,143,232,.72); box-shadow: 0 10px 30px rgba(0,0,0,.24),0 0 24px rgba(67,143,232,.2); }
+.circuit-trace.signal-1 { border-color: rgba(243,191,32,.72); box-shadow: 0 10px 30px rgba(0,0,0,.24),0 0 24px rgba(243,191,32,.18); }
+.circuit-trace.is-starting strong { color: #d8d0c5; }
 .board-node { position: absolute; transform: translate(-50%, -50%); z-index: 4; }
 .card-slot { width: 7.9%; min-width: 52px; aspect-ratio: .655; border: 0; padding: 0; background: none; overflow: visible; }
 .card-slot:disabled { opacity: 1; }
@@ -119,4 +126,3 @@
 .card-back-ring { width: 42px; height: 42px; border-radius: 50%; border: 2px solid var(--yellow); display: grid; place-items: center; transform: rotate(-12deg); background: #181511; z-index: 1; }
 .card-back-ring span { color: var(--yellow); font: 14px/1 'Archivo Black'; }
 .card-back b { position: absolute; bottom: 8px; font: 7px/1 'IBM Plex Mono'; letter-spacing: .12em; z-index: 1; }
-
