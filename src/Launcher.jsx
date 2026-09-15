@@ -5,7 +5,7 @@ export default function Launcher() {
   return (
     <main className="launcher-page">
       <section className="launcher-card">
-        <div className="launcher-brand"><span>LOGIC GATE DUEL</span><h1>어떻게 플레이할까요?</h1></div>
+        <div className="launcher-brand"><h1>어떻게 플레이할까요?</h1></div>
         <div className="launcher-options">
           <motion.a className="launcher-option online" href="?online=1" whileHover={{y:-4}} whileTap={{scale:.985}}>
             <strong>친구와 하기</strong>
