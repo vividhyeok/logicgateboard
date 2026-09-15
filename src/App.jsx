@@ -7,6 +7,9 @@ import { CoinOverlay, DeckStack, GameBoard, InputChoice, MapPreview, PlayerHand,
 
 const STORAGE_KEY = 'logic-gate-duel-playtests-v2'
 const SOUND_KEY = 'logic-gate-duel-sound'
+const RESOLVE_START_MS = 420
+const RESOLVE_STEP_MS = 520
+const RESOLVE_END_MS = 620
 function readRecords() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]') } catch { return [] } }
 
 function Icon({ name }) {
@@ -36,7 +39,7 @@ export default function App() {
   const [screen,setScreen]=useState('menu'); const [mode,setMode]=useState('cpu'); const [level,setLevel]=useState(1); const [game,setGame]=useState(null)
   const [coinVisible,setCoinVisible]=useState(false); const [inputCurtain,setInputCurtain]=useState(false); const [turnCurtain,setTurnCurtain]=useState(false)
   const [inputDraft,setInputDraft]=useState({}); const [selectedAction,setSelectedAction]=useState(null); const [wildSides,setWildSides]=useState({0:'NOT',1:'NOT'})
-  const [dealing,setDealing]=useState(false); const [cpuThinking,setCpuThinking]=useState(false); const [solution,setSolution]=useState(null); const [resolving,setResolving]=useState(false)
+  const [dealing,setDealing]=useState(false); const [cpuThinking,setCpuThinking]=useState(false); const [solution,setSolution]=useState(null); const [revealIndex,setRevealIndex]=useState(-1); const [resolving,setResolving]=useState(false)
   const [records,setRecords]=useState(()=>readRecords()); const [soundOn,setSoundOn]=useState(()=>localStorage.getItem(SOUND_KEY)!=='off'); const timeouts=useRef([]); const resolutionStarted=useRef(false)
   const map=game?MAP_BY_ID[game.mapId]:null; const viewerId=game?(game.mode==='local'?game.currentPlayer:0):0; const opponentId=1-viewerId; const inputPlayer=game?.phase==='input_selection'?nextInputPlayer(game):null
 
@@ -47,8 +50,8 @@ export default function App() {
   useEffect(()=>{ if(game?.phase==='reveal'&&!resolutionStarted.current)runCircuit() },[game?.phase])
 
   function queueTimeout(fn,ms){ const id=window.setTimeout(fn,ms); timeouts.current.push(id); return id }
-  function startGame(mapId,sameSeed=null){ timeouts.current.forEach(clearTimeout); timeouts.current=[]; resolutionStarted.current=false; const next=createGame(mapId,mode,sameSeed??undefined); setGame(next); setScreen('game'); setCoinVisible(true); setInputCurtain(false); setTurnCurtain(false); setInputDraft({}); setSelectedAction(null); setWildSides({0:'NOT',1:'NOT'}); setDealing(false); setSolution(null); setResolving(false) }
-  function goMenu(){ timeouts.current.forEach(clearTimeout); timeouts.current=[]; setScreen('menu'); setGame(null); setSelectedAction(null); setSolution(null); setResolving(false) }
+  function startGame(mapId,sameSeed=null){ timeouts.current.forEach(clearTimeout); timeouts.current=[]; resolutionStarted.current=false; const next=createGame(mapId,mode,sameSeed??undefined); setGame(next); setScreen('game'); setCoinVisible(true); setInputCurtain(false); setTurnCurtain(false); setInputDraft({}); setSelectedAction(null); setWildSides({0:'NOT',1:'NOT'}); setDealing(false); setSolution(null); setRevealIndex(-1); setResolving(false) }
+  function goMenu(){ timeouts.current.forEach(clearTimeout); timeouts.current=[]; setScreen('menu'); setGame(null); setSelectedAction(null); setSolution(null); setRevealIndex(-1); setResolving(false) }
   function afterCoin(){ setCoinVisible(false); sound('turn') }
   function handleTarget(value){ const next=chooseTarget(game,game.targetChooser,value); setGame(next); setInputDraft({}); if(next.mode==='local')setInputCurtain(true); sound('flip') }
   function beginDeal(nextGame){ setGame(nextGame); setDealing(true); setSelectedAction(null); const handSize=nextGame.players[0].hand.length+nextGame.players[1].hand.length; for(let index=0;index<handSize;index+=1)queueTimeout(()=>sound('deal'),100+index*70); queueTimeout(()=>{ setDealing(false); if(nextGame.mode==='local')setTurnCurtain(true); else if(nextGame.currentPlayer===0)sound('turn') },450+handSize*70) }
@@ -56,11 +59,33 @@ export default function App() {
   function selectAction(action){ if(dealing||resolving||game?.phase!=='play')return; setSelectedAction((current)=>current?.cardId===action.cardId&&current?.kind===action.kind?null:action) }
   function placeAction(slotId,action=selectedAction){ if(!action||!game||game.phase!=='play')return; const next=playMove(game,slotId,action); if(next===game)return; sound('place'); setSelectedAction(null); setGame(next); if(next.mode==='local'&&next.phase==='play')setTurnCurtain(true) }
   function handleDrag(action,event){ const x=event?.clientX??event?.nativeEvent?.clientX; const y=event?.clientY??event?.nativeEvent?.clientY; if(x===undefined||y===undefined)return; const slot=document.elementsFromPoint(x,y).find((element)=>element?.dataset?.slotId); if(slot?.dataset?.slotId)placeAction(slot.dataset.slotId,action) }
-  function runCircuit(){ if(!game||game.phase!=='reveal'||resolving||resolutionStarted.current)return; resolutionStarted.current=true; const resolved=resolveGame(game); setSolution(resolved); setResolving(true); sound('flip'); queueTimeout(()=>{ const finished=finishGame(game,resolved); setGame(finished); setResolving(false); sound('win'); const record=recordFromGame(finished); setRecords((current)=>{ const next=[...current,record]; localStorage.setItem(STORAGE_KEY,JSON.stringify(next)); return next }) },520) }
+  function runCircuit(){
+    if(!game||game.phase!=='reveal'||resolving||resolutionStarted.current)return
+    resolutionStarted.current=true
+    const resolved=resolveGame(game)
+    setSolution(resolved)
+    setRevealIndex(-1)
+    setResolving(true)
+    sound('flip')
+    resolved.revealOrder.forEach((nodeId,index)=>queueTimeout(()=>{
+      setRevealIndex(index)
+      sound('signal',{value:resolved.signals[nodeId]})
+    },RESOLVE_START_MS+index*RESOLVE_STEP_MS))
+    const finishDelay=RESOLVE_START_MS+Math.max(0,resolved.revealOrder.length-1)*RESOLVE_STEP_MS+RESOLVE_END_MS
+    queueTimeout(()=>{
+      const finished=finishGame(game,resolved)
+      setGame(finished)
+      setRevealIndex(999)
+      setResolving(false)
+      sound('win')
+      const record=recordFromGame(finished)
+      setRecords((current)=>{ const next=[...current,record]; localStorage.setItem(STORAGE_KEY,JSON.stringify(next)); return next })
+    },finishDelay)
+  }
   function saveFeedback(feedback){ if(!game)return; setRecords((current)=>{ const next=current.map((record,index)=>index===current.length-1&&record.seed===game.seed?{...record,feedback}:record); localStorage.setItem(STORAGE_KEY,JSON.stringify(next)); return next }) }
   function exportRecords(){ if(!records.length)return; const blob=new Blob([JSON.stringify(records,null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob); const anchor=document.createElement('a'); anchor.href=url; anchor.download=`logic-gate-duel-playtests-${new Date().toISOString().slice(0,10)}.json`; anchor.click(); URL.revokeObjectURL(url) }
   function toggleFullscreen(){ if(document.fullscreenElement)document.exitFullscreen?.(); else document.documentElement.requestFullscreen?.() }
-  const phaseText=useMemo(()=>{ if(!game)return''; if(game.phase==='target_choice')return'목표 선택'; if(game.phase==='input_selection')return'입력 선택'; if(game.phase==='play')return game.currentPlayer===0?'내 차례':'상대 차례'; if(game.phase==='reveal')return'결과 확인'; return'' },[game])
+  const phaseText=useMemo(()=>{ if(!game)return''; if(game.phase==='target_choice')return'목표 선택'; if(game.phase==='input_selection')return'입력 선택'; if(game.phase==='play')return game.currentPlayer===0?'내 차례':'상대 차례'; if(game.phase==='reveal')return'계산 중'; return'' },[game])
 
   if(screen==='menu'||!game||!map)return <Menu mode={mode} setMode={setMode} level={level} setLevel={setLevel} onStart={startGame} records={records} soundOn={soundOn} onToggleSound={()=>setSoundOn((value)=>!value)} onExport={exportRecords}/>
   const currentPlayer=game.players[viewerId]; const opponentPlayer=game.players[opponentId]; const currentWild=wildSides[viewerId]
@@ -72,7 +97,7 @@ export default function App() {
     {game.phase==='input_selection'&&!inputCurtain&&inputPlayer!==null&&!(game.mode==='cpu'&&inputPlayer===1)&&<InputChoice game={game} playerId={inputPlayer} personal={game.mode==='cpu'} draft={inputDraft} onChange={(id,value)=>setInputDraft((draft)=>({...draft,[id]:value}))} onSubmit={submitInputs}/>}
     {(game.phase==='play'||game.phase==='reveal'||game.phase==='finished')&&<div className="table-layout">
       <div className="opponent-area"><PlayerHand player={opponentPlayer} playerId={opponentId} label="상대 카드" isCurrent={game.phase==='play'&&game.currentPlayer===opponentId} selectedAction={selectedAction} wildSide={wildSides[opponentId]} dealing={dealing} opponent/></div>
-      <div className="board-zone"><div className="deck-floating"><DeckStack count={game.deck.length} dealing={dealing}/></div><GameBoard map={map} game={game} viewerId={viewerId} selectedAction={selectedAction} onSlotClick={placeAction} revealAllInputs={game.phase==='finished'} solution={solution||game.result} resolving={resolving}/></div>
+      <div className="board-zone"><div className="deck-floating"><DeckStack count={game.deck.length} dealing={dealing}/></div><GameBoard map={map} game={game} viewerId={viewerId} selectedAction={selectedAction} onSlotClick={placeAction} revealAllInputs={game.phase==='reveal'||game.phase==='finished'||resolving} solution={solution||game.result} revealIndex={game.phase==='finished'?999:revealIndex} resolving={resolving}/></div>
       <div className="current-area"><PlayerHand player={currentPlayer} playerId={viewerId} label="내 카드" isCurrent={game.phase==='play'&&game.currentPlayer===viewerId&&!dealing&&!(game.mode==='cpu'&&viewerId===1)} selectedAction={selectedAction} wildSide={currentWild} onSelectAction={selectAction} onFlipWild={()=>{setWildSides((sides)=>({...sides,[viewerId]:sides[viewerId]==='NOT'?'EMPTY':'NOT'}));sound('flip')}} onDragAction={handleDrag} dealing={dealing}/>{selectedAction&&game.phase==='play'&&<div className="placement-hint">빛나는 빈칸에 놓으세요. <button onClick={()=>setSelectedAction(null)}>취소</button></div>}</div>
     </div>}
     <AnimatePresence>{coinVisible&&<CoinOverlay winnerId={game.coinWinner} viewerId={game.mode==='cpu'?0:null} onDone={afterCoin}/>} {inputCurtain&&game.phase==='input_selection'&&inputPlayer!==null&&<TurnCurtain playerId={inputPlayer} onReady={()=>{setInputCurtain(false);sound('turn')}}/>} {turnCurtain&&game.mode==='local'&&game.phase==='play'&&!dealing&&<TurnCurtain playerId={game.currentPlayer} onReady={()=>{setTurnCurtain(false);sound('turn')}}/>} {dealing&&<motion.div className="deal-banner" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}><span>카드 준비 중</span></motion.div>} {game.phase==='finished'&&<ResultOverlay game={game} map={map} onReplay={()=>startGame(game.mapId,game.seed)} onNewSeed={()=>startGame(game.mapId)} onMenu={goMenu} onSaveFeedback={saveFeedback}/>}</AnimatePresence>
