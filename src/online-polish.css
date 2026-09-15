@@ -78,6 +78,74 @@
 .connection-chip:not(.live) { border-color: #755b35; color: #e0b96d; }
 .disconnect-banner { backdrop-filter: blur(8px); }
 
+.sync-banner {
+  position: fixed;
+  z-index: 120;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 14px;
+  border: 1px solid rgba(255,210,74,.42);
+  border-radius: 999px;
+  background: rgba(20,18,14,.92);
+  color: #f3ead9;
+  box-shadow: 0 10px 40px rgba(0,0,0,.38), 0 0 26px rgba(255,210,74,.08);
+  backdrop-filter: blur(10px);
+  font: 750 10px/1 'IBM Plex Mono', monospace;
+}
+.sync-banner i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ffd24a;
+  box-shadow: 0 0 0 0 rgba(255,210,74,.5);
+  animation: online-sync-pulse 1s infinite;
+}
+
+.online-game-page::before {
+  content: '';
+  position: fixed;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 44%, rgba(255,210,74,.045), transparent 42%), linear-gradient(115deg, transparent 35%, rgba(255,255,255,.018) 50%, transparent 65%);
+  background-size: auto, 240% 100%;
+  animation: table-light-sweep 9s linear infinite;
+}
+.online-game-page > * { position: relative; z-index: 1; }
+.online-game-page .player-hand.is-current {
+  animation: current-player-breathe 2.2s ease-in-out infinite;
+}
+.online-game-page .card-slot.legal::after {
+  animation: legal-slot-charge 1.15s ease-in-out infinite;
+}
+.online-game-page .board-canvas[data-resolving='true']::after {
+  content: '';
+  position: absolute;
+  z-index: 25;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent, rgba(255,210,74,.13), transparent);
+  transform: translateY(-100%);
+  animation: circuit-scan 1.05s linear infinite;
+  mix-blend-mode: screen;
+}
+.online-result-card.won { animation: winner-card-glow 1.8s ease-in-out infinite alternate; }
+
+@keyframes online-sync-pulse { 70% { box-shadow: 0 0 0 8px rgba(255,210,74,0); } 100% { box-shadow: 0 0 0 0 rgba(255,210,74,0); } }
+@keyframes table-light-sweep { to { background-position: 0 0, -240% 0; } }
+@keyframes current-player-breathe { 50% { filter: drop-shadow(0 0 14px rgba(255,210,74,.13)); } }
+@keyframes legal-slot-charge { 50% { opacity: .72; filter: brightness(1.25); } }
+@keyframes circuit-scan { to { transform: translateY(100%); } }
+@keyframes winner-card-glow { to { box-shadow: 0 24px 90px rgba(0,0,0,.55), 0 0 55px rgba(255,210,74,.2); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .sync-banner i,.online-game-page::before,.online-game-page .player-hand.is-current,.online-game-page .card-slot.legal::after,.online-game-page .board-canvas[data-resolving='true']::after,.online-result-card.won { animation: none !important; }
+}
+
 .online-game-page .board-zone { min-width: 0; }
 .online-game-page .current-area { position: relative; z-index: 35; }
 .online-game-page .opponent-area { min-height: 62px; }

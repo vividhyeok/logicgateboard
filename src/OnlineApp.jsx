@@ -83,6 +83,7 @@ export default function OnlineApp() {
   const [revealIndex,setRevealIndex] = useState(-1)
   const [resolving,setResolving] = useState(false)
   const [copied,setCopied] = useState(false)
+  const [syncingAction,setSyncingAction] = useState(false)
   const [records,setRecords] = useState(()=>readRecords())
   const sessionRef = useRef(null)
   const fullGameRef = useRef(null)
@@ -93,6 +94,7 @@ export default function OnlineApp() {
   const hasConnectedRef = useRef(false)
   const connectionEventsRef = useRef([])
   const loggedSeedsRef = useRef(new Set())
+  const handledCommandIdsRef = useRef(new Set())
 
   const map = game ? MAP_BY_ID[game.mapId] : MAP_BY_ID[mapId]
   const opponentId = playerId === null ? 1 : 1 - playerId
@@ -131,7 +133,7 @@ export default function OnlineApp() {
   function clearHostRecovery(code=roomRef.current){ try{ localStorage.removeItem(hostRecoveryKey(code)) }catch{} }
 
   function setDealPulse(){ setDealing(true); later(()=>setDealing(false),1100) }
-  function showStart(snapshot){ setGame(snapshot); setScreen('game'); setSelectedAction(null); setInputDraft({}); setWildSide('NOT'); setSolution(null); setRevealIndex(-1); setResolving(false); setCoinVisible(true); sound('turn') }
+  function showStart(snapshot){ setGame(snapshot); setScreen('game'); setSelectedAction(null); setInputDraft({}); setWildSide('NOT'); setSolution(null); setRevealIndex(-1); setResolving(false); setSyncingAction(false); setCoinVisible(true); sound('turn') }
 
   function createHostSession(code,selectedMapId,{resumeGame=null}={}){
     const session=createHostPeer(code,{
@@ -144,7 +146,7 @@ export default function OnlineApp() {
       },
       onDisconnected:markDisconnected,
       onError:markError,
-      onData:(data)=>handleHostData(data),
+      onData:(data,messageId)=>handleHostData(data,messageId),
     })
     sessionRef.current=session
     if(resumeGame){ fullGameRef.current=resumeGame; setGame(resumeGame); setScreen('game'); setCoinVisible(false); setSolution(resumeGame.result||null); setRevealIndex(resumeGame.phase==='finished'?999:-1) }
@@ -178,25 +180,34 @@ export default function OnlineApp() {
       onError:markError,
       onMeta:(meta)=>{ if(meta?.mapId){ mapRef.current=meta.mapId; setMapId(meta.mapId) } },
       onRoomClosed:()=>{ setConnected(false); setConnectionState('closed'); setError('PLAYER 1이 방을 종료했습니다.') },
+      onDeliveryTimeout:()=>{ setSyncingAction(false); setError('명령 전달이 지연되고 있습니다. 연결이 복구되면 다시 시도해 주세요.') },
       onData:(data)=>handleGuestData(data),
     })
     sessionRef.current=session
   }
 
   function hostCommit(next,meta={}){
-    fullGameRef.current=next; setGame(next); saveHostRecovery(next); sessionRef.current?.send({type:'state',game:snapshotForPlayer(next,1),meta})
+    const previousRevision=Number(fullGameRef.current?.revision||0)
+    const committed={...next,revision:previousRevision+1,updatedAt:Date.now()}
+    fullGameRef.current=committed; setGame(committed); saveHostRecovery(committed); sessionRef.current?.send({type:'state',game:snapshotForPlayer(committed,1),meta})
     if(meta.deal)setDealPulse(); if(meta.sound)sound(meta.sound)
+    return committed
   }
 
   function startMatch(seed){
     if(role!=='host'||!connected)return
-    const next=createGame(mapRef.current,'online',seed??undefined); fullGameRef.current=next; saveHostRecovery(next); showStart(next)
+    const next={...createGame(mapRef.current,'online',seed??undefined),revision:0,updatedAt:Date.now()}; fullGameRef.current=next; saveHostRecovery(next); showStart(next)
     sessionRef.current?.setMeta?.({mapId:mapRef.current,status:'playing'})
     sessionRef.current?.send({type:'start',game:snapshotForPlayer(next,1)})
   }
 
-  function handleHostData(data){
+  function handleHostData(data,messageId){
     if(!data||typeof data!=='object')return
+    if(messageId&&handledCommandIdsRef.current.has(messageId))return
+    if(messageId){
+      handledCommandIdsRef.current.add(messageId)
+      if(handledCommandIdsRef.current.size>200)handledCommandIdsRef.current.delete(handledCommandIdsRef.current.values().next().value)
+    }
     if(data.type==='hello'){
       const current=fullGameRef.current
       if(current) sessionRef.current?.send({type:'state',game:snapshotForPlayer(current,1),meta:{reconnected:true}})
@@ -205,6 +216,10 @@ export default function OnlineApp() {
     }
     if(data.type!=='command')return
     const current=fullGameRef.current; if(!current)return
+    if(Number(data.expectedRevision)!==Number(current.revision||0)){
+      sessionRef.current?.send({type:'state',game:snapshotForPlayer(current,1),meta:{resynced:true}})
+      return
+    }
     if(data.command==='target'){
       const next=chooseTarget(current,1,Number(data.value)); if(next!==current)hostCommit(next,{sound:'flip'})
     } else if(data.command==='inputs'){
@@ -220,17 +235,24 @@ export default function OnlineApp() {
     if(data.type==='lobby'){ mapRef.current=data.mapId; roomRef.current=data.roomCode||roomRef.current; setMapId(data.mapId); setRoomCode(roomRef.current); setScreen('lobby'); return }
     if(data.type==='start'){ showStart(data.game); return }
     if(data.type==='state'){
-      setGame(data.game); setScreen('game'); setSelectedAction(null); if(data.meta?.deal)setDealPulse(); if(data.meta?.sound)sound(data.meta.sound)
+      setGame(data.game); setScreen('game'); setSelectedAction(null); setSyncingAction(false); setError(''); if(data.meta?.deal)setDealPulse(); if(data.meta?.sound)sound(data.meta.sound)
       if(data.game?.phase==='finished'){ setResolving(false); setSolution(data.game.result); setRevealIndex(999) }
       return
     }
     if(data.type==='resolve')beginResolutionLocal(data.result)
   }
 
+  function sendGuestCommand(command,values={}){
+    if(!connected||syncingAction)return false
+    setSyncingAction(true)
+    sessionRef.current?.send({type:'command',command,expectedRevision:Number(game?.revision||0),...values})
+    return true
+  }
+
   function handleTarget(value){
     if(!connected||!game||game.targetChooser!==playerId)return
     if(role==='host'){ const next=chooseTarget(fullGameRef.current,0,value); if(next!==fullGameRef.current)hostCommit(next,{sound:'flip'}) }
-    else sessionRef.current?.send({type:'command',command:'target',value})
+    else sendGuestCommand('target',{value})
   }
 
   function submitInputs(){
@@ -239,7 +261,7 @@ export default function OnlineApp() {
       const current=fullGameRef.current; const next=setPlayerInputs(current,0,inputDraft)
       if(next!==current){ setInputDraft({}); hostCommit(next,{deal:current.phase!=='play'&&next.phase==='play',sound:'flip'}) }
     } else {
-      sessionRef.current?.send({type:'command',command:'inputs',values:inputDraft}); setInputDraft({}); sound('flip')
+      if(sendGuestCommand('inputs',{values:inputDraft})){ setInputDraft({}); sound('flip') }
     }
   }
 
@@ -248,7 +270,7 @@ export default function OnlineApp() {
     if(!connected||!action||!game||game.phase!=='play'||game.currentPlayer!==playerId)return
     setSelectedAction(null)
     if(role==='host'){ const current=fullGameRef.current; const next=playMove(current,slotId,action); if(next!==current)hostCommit(next,{sound:'place'}) }
-    else sessionRef.current?.send({type:'command',command:'move',slotId,action})
+    else sendGuestCommand('move',{slotId,action})
   }
   function handleDrag(action,event){ const x=event?.clientX??event?.nativeEvent?.clientX; const y=event?.clientY??event?.nativeEvent?.clientY; if(x===undefined||y===undefined)return; const slot=document.elementsFromPoint(x,y).find((element)=>element?.dataset?.slotId); if(slot?.dataset?.slotId)placeAction(slot.dataset.slotId,action) }
 
@@ -286,8 +308,8 @@ export default function OnlineApp() {
     result.revealOrder.forEach((nodeId,index)=>later(()=>{ setRevealIndex(index); sound('signal',{value:result.signals[nodeId]}) },420+index*520))
     later(()=>{ setResolving(false); resolvingRef.current=false },760+result.revealOrder.length*520)
   }
-  function requestResolution(){ if(!connected)return; if(role==='host')beginResolutionHost(); else sessionRef.current?.send({type:'command',command:'resolve'}) }
-  function requestReplay(){ if(!connected)return; if(role==='host')startMatch(); else sessionRef.current?.send({type:'command',command:'replay'}) }
+  function requestResolution(){ if(!connected)return; if(role==='host')beginResolutionHost(); else sendGuestCommand('resolve') }
+  function requestReplay(){ if(!connected)return; if(role==='host')startMatch(); else sendGuestCommand('replay') }
 
   async function shareInvite(){
     const code=roomRef.current || roomCode
@@ -312,7 +334,7 @@ export default function OnlineApp() {
   if(!game||playerId===null||!role)return null
 
   const me=game.players[playerId]
-  const myTurn=connected&&game.phase==='play'&&game.currentPlayer===playerId&&!dealing&&!resolving
+  const myTurn=connected&&!syncingAction&&game.phase==='play'&&game.currentPlayer===playerId&&!dealing&&!resolving
   const phaseText=game.phase==='target_choice'?'TARGET 선택':game.phase==='input_selection'?'비밀 INPUT 설정':game.phase==='play'?`TURN ${game.turnNumber+1}`:game.phase==='reveal'?(resolving?'신호 계산 중':'회로 완성'):'RESULT'
   const connectionLabel=connected?'CONNECTED':connectionState==='reconnecting'?'RECONNECTING…':connectionState==='closed'?'ROOM CLOSED':'CONNECTING…'
   return <LayoutGroup><main className="game-page online-game-page">
@@ -331,6 +353,7 @@ export default function OnlineApp() {
 
     <AnimatePresence>{coinVisible&&<CoinOverlay winnerId={game.coinWinner} onDone={()=>setCoinVisible(false)}/>} {dealing&&<motion.div className="deal-banner" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}><span>SHUFFLE / DEAL</span><strong>{MAP_BY_ID[game.mapId].level===1?'4':'5'} CARDS EACH</strong></motion.div>} {game.phase==='finished'&&<OnlineResult game={game} playerId={playerId} role={role} onReplay={requestReplay} onMenu={leave}/>}</AnimatePresence>
     {!connected&&<div className="disconnect-banner">{connectionState==='closed'?'방이 종료되었습니다.':'상대 연결이 끊겼습니다. 방과 게임 상태를 유지한 채 자동 재연결을 기다리는 중입니다.'}</div>}
+    {syncingAction&&connected&&<div className="sync-banner"><i/><span>상대 기기에 행동을 동기화하는 중…</span></div>}
     {copied&&<div className="copy-toast">초대 문구 · 방 코드 · 링크 복사됨</div>}
   </main></LayoutGroup>
 }

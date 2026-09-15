@@ -1,8 +1,10 @@
-import { get, onChildAdded, onDisconnect, onValue, push, ref, remove, serverTimestamp, set, update } from 'firebase/database'
+import { get, onChildAdded, onDisconnect, onValue, ref, remove, serverTimestamp, set, update } from 'firebase/database'
 import { getFirebaseDatabase } from './firebaseClient.js'
 
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-const DISCONNECT_GRACE_MS = 2500
+const DISCONNECT_GRACE_MS = 5000
+const COMMAND_RETRY_MS = 1400
+const COMMAND_TTL_MS = 30000
 
 export function makeRoomCode(length = 6) {
   const bytes = new Uint8Array(length)
@@ -24,27 +26,34 @@ function messageId() {
   return `${Date.now()}-${bytes[0].toString(36)}`
 }
 
-function roomRefs(db, code) {
+function sessionId(role) {
+  return `${role}-${messageId()}`.replace(/[^a-zA-Z0-9-]/g, '')
+}
+
+function roomRefs(db, code, role, clientId) {
   const room = String(code).trim().toUpperCase()
   const base = `rooms/${room}`
   return {
     root: ref(db, base),
     meta: ref(db, `${base}/meta`),
-    hostOnline: ref(db, `${base}/presence/host`),
-    guestOnline: ref(db, `${base}/presence/guest`),
+    ownPresence: ref(db, `${base}/presence/${role}/${clientId}`),
+    hostPresence: ref(db, `${base}/presence/host`),
+    guestPresence: ref(db, `${base}/presence/guest`),
     guestCommands: ref(db, `${base}/messages/guestToHost`),
     hostLatest: ref(db, `${base}/messages/hostToGuest/latest`),
+    guestAcks: ref(db, `${base}/messages/guestAcks`),
     infoConnected: ref(db, '.info/connected'),
   }
 }
 
-function presenceValue(role) {
-  return { online: true, role, at: serverTimestamp() }
+function presenceValue(role, clientId) {
+  return { online: true, role, clientId, at: serverTimestamp() }
 }
 
 function isOnline(snapshot) {
   const value = snapshot.val()
-  return value === true || value?.online === true
+  if (value === true || value?.online === true) return true
+  return value && Object.values(value).some((entry) => entry?.online === true)
 }
 
 function clearDisconnectTimer(timer) {
@@ -54,7 +63,8 @@ function clearDisconnectTimer(timer) {
 
 export function createHostPeer(code, handlers = {}) {
   const db = getFirebaseDatabase()
-  const refs = roomRefs(db, code)
+  const clientId = sessionId('host')
+  const refs = roomRefs(db, code, 'host', clientId)
   let closed = false
   let connected = false
   let disconnectTimer = null
@@ -96,15 +106,15 @@ export function createHostPeer(code, handlers = {}) {
       unsubscribers.push(onValue(refs.infoConnected, async (snapshot) => {
         if (closed || snapshot.val() !== true) return
         try {
-          await onDisconnect(refs.hostOnline).remove()
-          await set(refs.hostOnline, presenceValue('host'))
+          await onDisconnect(refs.ownPresence).remove()
+          await set(refs.ownPresence, presenceValue('host', clientId))
           handlers.onTransportReady?.()
         } catch (error) {
           if (!closed) handlers.onError?.(error)
         }
       }))
 
-      unsubscribers.push(onValue(refs.guestOnline, (snapshot) => {
+      unsubscribers.push(onValue(refs.guestPresence, (snapshot) => {
         applyGuestPresence(isOnline(snapshot))
       }))
 
@@ -115,9 +125,11 @@ export function createHostPeer(code, handlers = {}) {
           return
         }
         try {
-          handlers.onData?.(message.payload)
-        } finally {
-          try { await remove(snapshot.ref) } catch {}
+          await handlers.onData?.(message.payload, message.id)
+          if (message.id) await set(ref(db, `rooms/${String(code).trim().toUpperCase()}/messages/guestAcks/${message.id}`), { at: serverTimestamp() })
+          await remove(snapshot.ref)
+        } catch (error) {
+          if (!closed) handlers.onError?.(error)
         }
       }))
 
@@ -155,20 +167,36 @@ export function createHostPeer(code, handlers = {}) {
       closed = true
       disconnectTimer = clearDisconnectTimer(disconnectTimer)
       unsubscribers.forEach((unsubscribe) => unsubscribe())
-      try { await remove(refs.hostOnline) } catch {}
+      try { await remove(refs.ownPresence) } catch {}
     },
   }
 }
 
 export function createGuestPeer(code, handlers = {}) {
   const db = getFirebaseDatabase()
-  const refs = roomRefs(db, code)
+  const clientId = sessionId('guest')
+  const refs = roomRefs(db, code, 'guest', clientId)
   let closed = false
   let connected = false
   let disconnectTimer = null
   let lastHostMessageId = null
   let pendingHostPayload = null
   const unsubscribers = []
+  const pendingCommands = new Map()
+
+  function stopPending(id) {
+    const pending = pendingCommands.get(id)
+    if (!pending) return
+    window.clearInterval(pending.timer)
+    pendingCommands.delete(id)
+  }
+
+  function writeCommand(id, payload) {
+    if (closed) return
+    set(ref(db, `rooms/${String(code).trim().toUpperCase()}/messages/guestToHost/${id}`), {
+      id, clientId, sentAt: serverTimestamp(), payload,
+    }).catch((error) => { if (!closed) handlers.onError?.(error) })
+  }
 
   function deliverPendingHostPayload() {
     if (!connected || !pendingHostPayload) return
@@ -212,15 +240,15 @@ export function createGuestPeer(code, handlers = {}) {
       unsubscribers.push(onValue(refs.infoConnected, async (snapshot) => {
         if (closed || snapshot.val() !== true) return
         try {
-          await onDisconnect(refs.guestOnline).remove()
-          await set(refs.guestOnline, presenceValue('guest'))
+          await onDisconnect(refs.ownPresence).remove()
+          await set(refs.ownPresence, presenceValue('guest', clientId))
           handlers.onTransportReady?.()
         } catch (error) {
           if (!closed) handlers.onError?.(error)
         }
       }))
 
-      unsubscribers.push(onValue(refs.hostOnline, (snapshot) => {
+      unsubscribers.push(onValue(refs.hostPresence, (snapshot) => {
         applyHostPresence(isOnline(snapshot))
       }))
 
@@ -242,6 +270,11 @@ export function createGuestPeer(code, handlers = {}) {
         }
         handlers.onData?.(message.payload)
       }))
+
+      unsubscribers.push(onChildAdded(refs.guestAcks, (snapshot) => {
+        stopPending(snapshot.key)
+        remove(snapshot.ref).catch(() => {})
+      }))
     } catch (error) {
       if (!closed) handlers.onError?.(error)
     }
@@ -250,12 +283,19 @@ export function createGuestPeer(code, handlers = {}) {
   return {
     send(data) {
       if (closed) return
-      const target = push(refs.guestCommands)
-      set(target, {
-        id: messageId(),
-        sentAt: serverTimestamp(),
-        payload: data,
-      }).catch((error) => handlers.onError?.(error))
+      const id = messageId().replace(/[^a-zA-Z0-9-]/g, '')
+      const startedAt = Date.now()
+      const timer = window.setInterval(() => {
+        if (Date.now() - startedAt > COMMAND_TTL_MS) {
+          stopPending(id)
+          handlers.onDeliveryTimeout?.(data)
+          return
+        }
+        writeCommand(id, data)
+      }, COMMAND_RETRY_MS)
+      pendingCommands.set(id, { timer })
+      writeCommand(id, data)
+      return id
     },
     connected() { return connected },
     async getMeta() {
@@ -265,8 +305,10 @@ export function createGuestPeer(code, handlers = {}) {
     async destroy() {
       closed = true
       disconnectTimer = clearDisconnectTimer(disconnectTimer)
+      pendingCommands.forEach(({ timer }) => window.clearInterval(timer))
+      pendingCommands.clear()
       unsubscribers.forEach((unsubscribe) => unsubscribe())
-      try { await remove(refs.guestOnline) } catch {}
+      try { await remove(refs.ownPresence) } catch {}
     },
   }
 }
