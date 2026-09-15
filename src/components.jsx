@@ -96,7 +96,10 @@ export function GameBoard({ map, game, viewerId, selectedAction, onSlotClick, re
           const owner = node.type === 'input' ? inputOwner(game,node.id) : null
           const inputValue = node.type === 'input' ? visibleInputValue(game,node.id,viewerId,revealAllInputs) : null
           const signalVisible = solution && nodeRevealed(node.id,node.type); const signal = signalVisible ? solution.signals[node.id] : undefined
-          if (node.type === 'input') return <div key={node.id} className="board-node input-node" style={style}><BoardInputCard id={node.id} value={inputValue ?? game.players[owner].inputValues[node.id]} owner={owner} reveal={inputValue !== null || revealAllInputs} activeSignal={signal}/></div>
+          if (node.type === 'input') {
+            const ownedValue = owner === viewerId ? game.players[owner]?.inputValues?.[node.id] : undefined
+            return <div key={node.id} className="board-node input-node" style={style}><BoardInputCard id={node.id} value={inputValue ?? ownedValue} owner={owner} reveal={inputValue !== null || revealAllInputs} activeSignal={signal}/></div>
+          }
           if (node.type === 'output') return <div key={node.id} className="board-node output-node" style={style}><OutputCard value={solution?.output} revealed={Boolean(signalVisible)}/>{signal !== undefined && <SignalDot value={signal}/>}</div>
           const placement = game.placements[node.id]; const legal = legalSlots.includes(node.id)
           return <button key={node.id} type="button" data-slot-id={node.id} className={`board-node card-slot ${node.type === 'wild' ? 'wild-slot' : ''} ${legal ? 'legal' : ''} ${placement ? 'filled' : ''}`} style={style} onClick={() => legal && onSlotClick(node.id)} disabled={!legal && !placement}>
