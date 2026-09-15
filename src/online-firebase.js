@@ -2,6 +2,7 @@ import { get, onChildAdded, onDisconnect, onValue, push, ref, remove, serverTime
 import { getFirebaseDatabase } from './firebaseClient.js'
 
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+const DISCONNECT_GRACE_MS = 2500
 
 export function makeRoomCode(length = 6) {
   const bytes = new Uint8Array(length)
@@ -46,12 +47,37 @@ function isOnline(snapshot) {
   return value === true || value?.online === true
 }
 
+function clearDisconnectTimer(timer) {
+  if (timer) window.clearTimeout(timer)
+  return null
+}
+
 export function createHostPeer(code, handlers = {}) {
   const db = getFirebaseDatabase()
   const refs = roomRefs(db, code)
   let closed = false
   let connected = false
+  let disconnectTimer = null
   const unsubscribers = []
+
+  function applyGuestPresence(next) {
+    if (closed) return
+    if (next) {
+      disconnectTimer = clearDisconnectTimer(disconnectTimer)
+      if (!connected) {
+        connected = true
+        handlers.onConnected?.()
+      }
+      return
+    }
+    if (!connected || disconnectTimer) return
+    disconnectTimer = window.setTimeout(() => {
+      disconnectTimer = null
+      if (closed || !connected) return
+      connected = false
+      handlers.onDisconnected?.()
+    }, DISCONNECT_GRACE_MS)
+  }
 
   ;(async () => {
     try {
@@ -70,8 +96,8 @@ export function createHostPeer(code, handlers = {}) {
       unsubscribers.push(onValue(refs.infoConnected, async (snapshot) => {
         if (closed || snapshot.val() !== true) return
         try {
-          await set(refs.hostOnline, presenceValue('host'))
           await onDisconnect(refs.hostOnline).remove()
+          await set(refs.hostOnline, presenceValue('host'))
           handlers.onTransportReady?.()
         } catch (error) {
           if (!closed) handlers.onError?.(error)
@@ -79,10 +105,7 @@ export function createHostPeer(code, handlers = {}) {
       }))
 
       unsubscribers.push(onValue(refs.guestOnline, (snapshot) => {
-        const next = isOnline(snapshot)
-        if (next && !connected) handlers.onConnected?.()
-        if (!next && connected) handlers.onDisconnected?.()
-        connected = next
+        applyGuestPresence(isOnline(snapshot))
       }))
 
       unsubscribers.push(onChildAdded(refs.guestCommands, async (snapshot) => {
@@ -124,11 +147,13 @@ export function createHostPeer(code, handlers = {}) {
     },
     async closeRoom() {
       closed = true
+      disconnectTimer = clearDisconnectTimer(disconnectTimer)
       unsubscribers.forEach((unsubscribe) => unsubscribe())
       try { await remove(refs.root) } catch {}
     },
     async destroy() {
       closed = true
+      disconnectTimer = clearDisconnectTimer(disconnectTimer)
       unsubscribers.forEach((unsubscribe) => unsubscribe())
       try { await remove(refs.hostOnline) } catch {}
     },
@@ -140,8 +165,37 @@ export function createGuestPeer(code, handlers = {}) {
   const refs = roomRefs(db, code)
   let closed = false
   let connected = false
+  let disconnectTimer = null
   let lastHostMessageId = null
+  let pendingHostPayload = null
   const unsubscribers = []
+
+  function deliverPendingHostPayload() {
+    if (!connected || !pendingHostPayload) return
+    const payload = pendingHostPayload
+    pendingHostPayload = null
+    handlers.onData?.(payload)
+  }
+
+  function applyHostPresence(next) {
+    if (closed) return
+    if (next) {
+      disconnectTimer = clearDisconnectTimer(disconnectTimer)
+      if (!connected) {
+        connected = true
+        handlers.onConnected?.()
+      }
+      deliverPendingHostPayload()
+      return
+    }
+    if (!connected || disconnectTimer) return
+    disconnectTimer = window.setTimeout(() => {
+      disconnectTimer = null
+      if (closed || !connected) return
+      connected = false
+      handlers.onDisconnected?.()
+    }, DISCONNECT_GRACE_MS)
+  }
 
   ;(async () => {
     try {
@@ -158,8 +212,8 @@ export function createGuestPeer(code, handlers = {}) {
       unsubscribers.push(onValue(refs.infoConnected, async (snapshot) => {
         if (closed || snapshot.val() !== true) return
         try {
-          await set(refs.guestOnline, presenceValue('guest'))
           await onDisconnect(refs.guestOnline).remove()
+          await set(refs.guestOnline, presenceValue('guest'))
           handlers.onTransportReady?.()
         } catch (error) {
           if (!closed) handlers.onError?.(error)
@@ -167,10 +221,7 @@ export function createGuestPeer(code, handlers = {}) {
       }))
 
       unsubscribers.push(onValue(refs.hostOnline, (snapshot) => {
-        const next = isOnline(snapshot)
-        if (next && !connected) handlers.onConnected?.()
-        if (!next && connected) handlers.onDisconnected?.()
-        connected = next
+        applyHostPresence(isOnline(snapshot))
       }))
 
       unsubscribers.push(onValue(refs.meta, (snapshot) => {
@@ -185,6 +236,10 @@ export function createGuestPeer(code, handlers = {}) {
         const message = snapshot.val()
         if (!message?.id || message.id === lastHostMessageId) return
         lastHostMessageId = message.id
+        if (!connected) {
+          pendingHostPayload = message.payload
+          return
+        }
         handlers.onData?.(message.payload)
       }))
     } catch (error) {
@@ -209,6 +264,7 @@ export function createGuestPeer(code, handlers = {}) {
     },
     async destroy() {
       closed = true
+      disconnectTimer = clearDisconnectTimer(disconnectTimer)
       unsubscribers.forEach((unsubscribe) => unsubscribe())
       try { await remove(refs.guestOnline) } catch {}
     },
