@@ -4,6 +4,7 @@ import App from './App.jsx'
 import OnlineApp from './OnlineApp.jsx'
 import './base.css'
 import './cards.css'
+import './gate-symbols.css'
 import './game.css'
 
 const params = new URLSearchParams(window.location.search)
