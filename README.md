@@ -8,19 +8,41 @@
 - 20장 Gate Deck: AND/NAND/OR/NOR/XOR 각 4장
 - Level 1 손패 4장 / Level 2 손패 5장
 - 양면 Wild: NOT / EMPTY
-- 2P Pass & Play, VS CPU
-- 비밀 INPUT 설정과 턴별 가림 화면
-- 공개 손패, 카드 드래그 & 드롭, 슬롯 스냅
+- VS CPU / 같은 기기 Pass & Play
+- Firebase Realtime Database 기반 Online 2P 구조
+- Online 2P에서는 상대 손패와 비밀 INPUT 비공개
 - 카드 딜링 / Wild flip / 회로 신호 / 결과 애니메이션
 - 브라우저 내 플레이테스트 기록 및 JSON 내보내기
-- Web Audio 기반 경량 효과음, 전체화면 지원
 
 ## Stack
 
 - React 18
 - Vite 5
 - Framer Motion
-- 별도 백엔드 없음
+- Firebase Realtime Database — Online 2P 상태 중계
+- Vercel — 웹 호스팅
+
+## Firebase 준비
+
+Online 2P는 Firebase 설정값이 없으면 비활성 상태입니다. `.env.example`의 변수를 채워야 합니다.
+
+필요한 환경 변수:
+
+```text
+VITE_FIREBASE_API_KEY
+VITE_FIREBASE_AUTH_DOMAIN
+VITE_FIREBASE_DATABASE_URL
+VITE_FIREBASE_PROJECT_ID
+VITE_FIREBASE_STORAGE_BUCKET
+VITE_FIREBASE_MESSAGING_SENDER_ID
+VITE_FIREBASE_APP_ID
+```
+
+로컬에서는 `.env.example`을 `.env.local`로 복사한 뒤 값을 채웁니다.
+
+Vercel에서는 Project Settings → Environment Variables에 같은 이름으로 등록한 뒤 Production 재배포가 필요합니다.
+
+Realtime Database는 프로토타입 단계에서 먼저 Test mode로 생성할 수 있습니다. 외부 테스트가 끝나면 Database Rules를 제한하는 것을 권장합니다.
 
 ## Local
 
@@ -42,6 +64,16 @@ npm run preview
 
 - Build Command: `npm run build`
 - Output Directory: `dist`
+
+## Online 2P 구조
+
+한쪽 브라우저가 Host가 되어 실제 게임 판정을 수행하고, Firebase RTDB는 두 기기 사이의 메시지와 접속 상태를 중계합니다.
+
+```text
+Host browser  ←→  Firebase RTDB  ←→  Guest browser
+```
+
+Host가 방 코드를 만들면 Guest가 같은 코드 또는 초대 링크로 입장합니다. 상대 손패와 비밀 INPUT은 각 플레이어용 snapshot에서 제거한 뒤 전송합니다.
 
 ## 플레이 규칙
 
