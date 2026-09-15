@@ -135,11 +135,24 @@
 }
 .online-result-card.won { animation: winner-card-glow 1.8s ease-in-out infinite alternate; }
 
-.online-result-overlay { overflow: hidden; perspective: 900px; }
+.online-result-overlay {
+  position: fixed!important;
+  inset: 0!important;
+  z-index: 10000!important;
+  display: grid!important;
+  place-items: center!important;
+  overflow: auto;
+  overscroll-behavior: contain;
+  perspective: 900px;
+  padding: max(18px,env(safe-area-inset-top)) max(14px,env(safe-area-inset-right)) max(18px,env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left));
+  background: rgba(7,7,6,.88)!important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
 .result-burst { position: absolute; width: min(760px,110vw); aspect-ratio: 1; border-radius: 50%; opacity: .28; animation: result-burst-in .9s ease-out both; }
 .win-burst { background: repeating-conic-gradient(from 0deg, rgba(85,216,200,.32) 0 4deg, transparent 4deg 15deg); }
 .lose-burst { background: repeating-conic-gradient(from 0deg, rgba(255,105,87,.2) 0 3deg, transparent 3deg 18deg); }
-.online-result-card { position: relative; z-index: 2; width: min(520px,100%); overflow: hidden; }
+.online-result-card { position: relative; z-index: 2; width: min(520px,100%); max-height: calc(100dvh - 36px); overflow: auto; isolation: isolate; }
 .online-result-card h2 { margin: 8px 0 16px; font: clamp(25px,5vw,38px)/1.05 'Archivo Black',sans-serif; color: #f6f0e5; }
 .result-output-orb { width: 116px; height: 116px; margin: 0 auto 18px!important; border-radius: 50%; display: grid; grid-template-columns: 1fr!important; gap: 0!important; place-content: center; background: #0d0c0a; border: 2px solid #ffd24a; box-shadow: inset 0 0 30px rgba(255,210,74,.1),0 0 32px rgba(255,210,74,.12); }
 .result-output-orb small { color: #9d9589; font: 700 8px/1 'IBM Plex Mono',monospace; letter-spacing: .08em; }
@@ -210,6 +223,11 @@
   .online-identity-strip { width: calc(100% - 12px); margin-top: 5px; }
   .online-identity-strip > span { padding: 8px 9px; grid-template-columns: auto 1fr; }
   .online-identity-strip em { grid-column: 2; }
+  .online-result-card { padding: 22px 16px; border-radius: 20px; }
+  .online-result-card h2 { margin-bottom: 12px; }
+  .result-output-orb { width: 96px; height: 96px; margin-bottom: 12px!important; }
+  .result-output-orb strong { font-size: 42px; }
+  .result-actions-online { grid-template-columns: 1fr!important; }
 }
 
 @media (orientation: portrait) and (max-width: 700px) {

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion'
 import { CoinOverlay, DeckStack, GameBoard, InputChoice, MapPreview, PlayerHand, TargetChoice } from './components.jsx'
 import { chooseTarget, createGame, finishGame, nextInputPlayer, playMove, recordFromGame, resolveGame, setPlayerInputs } from './game.js'
@@ -78,11 +79,11 @@ function OnlineResult({ game, playerId, role, rematchRequested, rematchStatus, o
   const won = game.result?.winner === playerId
   const winner = game.result?.winner ?? 0
   const waiting = role === 'guest' && rematchStatus === 'waiting'
-  return <motion.div className="online-result-overlay" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} transition={{duration:.28}}>
+  return createPortal(<motion.div className="online-result-overlay" role="dialog" aria-modal="true" aria-labelledby="online-result-title" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} transition={{duration:.28}}>
     <div className={`result-burst ${won?'win-burst':'lose-burst'}`}/>
     <motion.div className={`online-result-card ${won?'won':'lost'}`} initial={{scale:.76,y:42,rotateX:10}} animate={{scale:1,y:0,rotateX:0}} exit={{scale:.9,opacity:0}} transition={{type:'spring',stiffness:240,damping:21}}>
       <motion.span initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} transition={{delay:.18}}>{won?'VICTORY':'DEFEAT'}</motion.span>
-      <motion.h2 initial={{opacity:0,scale:.9}} animate={{opacity:1,scale:1}} transition={{delay:.24}}>{won?'당신이 이겼습니다!':'상대가 이겼습니다'}</motion.h2>
+      <motion.h2 id="online-result-title" initial={{opacity:0,scale:.9}} animate={{opacity:1,scale:1}} transition={{delay:.24}}>{won?'당신이 이겼습니다!':'상대가 이겼습니다'}</motion.h2>
       <motion.div className="result-output-orb" initial={{scale:0,rotate:-20}} animate={{scale:1,rotate:0}} transition={{delay:.3,type:'spring',stiffness:280,damping:18}}><small>FINAL OUTPUT</small><strong>{game.result?.output}</strong></motion.div>
       <div className="result-player-summary">
         {[0,1].map((id)=><motion.div key={id} className={`${winner===id?'winner':''} ${playerId===id?'is-me':''}`} initial={{opacity:0,x:id===0?-18:18}} animate={{opacity:1,x:0}} transition={{delay:.38+id*.08}}><span>{playerId===id?'YOU':`PLAYER ${id+1}`}</span><b>TARGET {game.players[id]?.target}</b><em>{winner===id?'WIN':'LOSE'}</em></motion.div>)}
@@ -91,7 +92,7 @@ function OnlineResult({ game, playerId, role, rematchRequested, rematchStatus, o
       {waiting&&<p className="rematch-notice waiting"><i/> 방장의 응답을 기다리는 중입니다.</p>}
       <div className="result-actions-online"><button className="online-primary" onClick={onReplay} disabled={waiting}>{role==='host'?(rematchRequested?'재대결 수락':'새 게임 시작'):(waiting?'요청 보냄':'재대결 요청')}</button><button className="online-secondary-button" onClick={onMenu}>방 나가기</button></div>
     </motion.div>
-  </motion.div>
+  </motion.div>, document.body)
 }
 
 export default function OnlineApp() {
