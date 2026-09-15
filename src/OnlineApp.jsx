@@ -74,9 +74,24 @@ function Lobby({ role, playerId, roomCode, connected, connectionState, disconnec
 
 function WaitingPanel({ children }) { return <motion.div className="phase-panel online-waiting" initial={{opacity:0,y:12}} animate={{opacity:1,y:0}}><span className="eyebrow">OPPONENT ACTION</span><h2>{children}</h2><div className="loader-line"/></motion.div> }
 
-function OnlineResult({ game, playerId, role, onReplay, onMenu }) {
+function OnlineResult({ game, playerId, role, rematchRequested, rematchStatus, onReplay, onMenu }) {
   const won = game.result?.winner === playerId
-  return <motion.div className="online-result-overlay" initial={{opacity:0}} animate={{opacity:1}}><motion.div className={`online-result-card ${won?'won':'lost'}`} initial={{scale:.88,y:28}} animate={{scale:1,y:0}} transition={{type:'spring',stiffness:260,damping:24}}><span>{won?'YOU WIN':'YOU LOSE'}</span><strong>OUTPUT {game.result?.output}</strong><p>PLAYER {game.result?.winner + 1} 승리 · TARGET {game.players[game.result?.winner]?.target}</p><div><button className="online-primary" onClick={onReplay}>{role==='host'?'새 시드로 재대결':'재대결 요청'}</button><button className="online-secondary-button" onClick={onMenu}>나가기</button></div></motion.div></motion.div>
+  const winner = game.result?.winner ?? 0
+  const waiting = role === 'guest' && rematchStatus === 'waiting'
+  return <motion.div className="online-result-overlay" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} transition={{duration:.28}}>
+    <div className={`result-burst ${won?'win-burst':'lose-burst'}`}/>
+    <motion.div className={`online-result-card ${won?'won':'lost'}`} initial={{scale:.76,y:42,rotateX:10}} animate={{scale:1,y:0,rotateX:0}} exit={{scale:.9,opacity:0}} transition={{type:'spring',stiffness:240,damping:21}}>
+      <motion.span initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} transition={{delay:.18}}>{won?'VICTORY':'DEFEAT'}</motion.span>
+      <motion.h2 initial={{opacity:0,scale:.9}} animate={{opacity:1,scale:1}} transition={{delay:.24}}>{won?'당신이 이겼습니다!':'상대가 이겼습니다'}</motion.h2>
+      <motion.div className="result-output-orb" initial={{scale:0,rotate:-20}} animate={{scale:1,rotate:0}} transition={{delay:.3,type:'spring',stiffness:280,damping:18}}><small>FINAL OUTPUT</small><strong>{game.result?.output}</strong></motion.div>
+      <div className="result-player-summary">
+        {[0,1].map((id)=><motion.div key={id} className={`${winner===id?'winner':''} ${playerId===id?'is-me':''}`} initial={{opacity:0,x:id===0?-18:18}} animate={{opacity:1,x:0}} transition={{delay:.38+id*.08}}><span>{playerId===id?'YOU':`PLAYER ${id+1}`}</span><b>TARGET {game.players[id]?.target}</b><em>{winner===id?'WIN':'LOSE'}</em></motion.div>)}
+      </div>
+      {role==='host'&&rematchRequested&&<motion.p className="rematch-notice" initial={{opacity:0,y:8}} animate={{opacity:1,y:0}}>상대가 재대결을 요청했습니다.</motion.p>}
+      {waiting&&<p className="rematch-notice waiting"><i/> 방장의 응답을 기다리는 중입니다.</p>}
+      <div className="result-actions-online"><button className="online-primary" onClick={onReplay} disabled={waiting}>{role==='host'?(rematchRequested?'재대결 수락':'새 게임 시작'):(waiting?'요청 보냄':'재대결 요청')}</button><button className="online-secondary-button" onClick={onMenu}>방 나가기</button></div>
+    </motion.div>
+  </motion.div>
 }
 
 export default function OnlineApp() {
@@ -100,6 +115,8 @@ export default function OnlineApp() {
   const [resolving,setResolving] = useState(false)
   const [copied,setCopied] = useState(false)
   const [syncingAction,setSyncingAction] = useState(false)
+  const [rematchRequested,setRematchRequested] = useState(false)
+  const [rematchStatus,setRematchStatus] = useState('idle')
   const [records,setRecords] = useState(()=>readRecords())
   const sessionRef = useRef(null)
   const fullGameRef = useRef(null)
@@ -149,7 +166,7 @@ export default function OnlineApp() {
   function clearHostRecovery(code=roomRef.current){ try{ localStorage.removeItem(hostRecoveryKey(code)) }catch{} }
 
   function setDealPulse(){ setDealing(true); later(()=>setDealing(false),1100) }
-  function showStart(snapshot){ const normalized=normalizeRemoteGame(snapshot); setGame(normalized); setScreen('game'); setSelectedAction(null); setInputDraft({}); setWildSide('NOT'); setSolution(null); setRevealIndex(-1); setResolving(false); setSyncingAction(false); setCoinVisible(true); sound('turn') }
+  function showStart(snapshot){ const normalized=normalizeRemoteGame(snapshot); setGame(normalized); setScreen('game'); setSelectedAction(null); setInputDraft({}); setWildSide('NOT'); setSolution(null); setRevealIndex(-1); setResolving(false); setSyncingAction(false); setRematchRequested(false); setRematchStatus('idle'); setCoinVisible(true); sound('turn') }
 
   function createHostSession(code,selectedMapId,{resumeGame=null}={}){
     const session=createHostPeer(code,{
@@ -212,7 +229,7 @@ export default function OnlineApp() {
   }
 
   function startMatch(seed){
-    if(role!=='host'||!connected)return
+    if(role!=='host'||connectionState==='closed'||(screen==='lobby'&&!connected))return
     const next={...createGame(mapRef.current,'online',seed??undefined),revision:0,updatedAt:Date.now()}; fullGameRef.current=next; saveHostRecovery(next); showStart(next)
     sessionRef.current?.setMeta?.({mapId:mapRef.current,status:'playing'})
     sessionRef.current?.send({type:'start',game:snapshotForPlayer(next,1)})
@@ -244,7 +261,10 @@ export default function OnlineApp() {
     } else if(data.command==='move'){
       const next=playMove(current,data.slotId,data.action); if(next!==current)hostCommit(next,{sound:'place'})
     } else if(data.command==='resolve') beginResolutionHost()
-    else if(data.command==='replay') startMatch()
+    else if(data.command==='replay'){
+      if(current.phase!=='finished')return
+      setRematchRequested(true); sound('turn'); sessionRef.current?.send({type:'rematch-requested'})
+    }
   }
 
   function handleGuestData(data){
@@ -257,6 +277,7 @@ export default function OnlineApp() {
       return
     }
     if(data.type==='resolve')beginResolutionLocal(data.result)
+    if(data.type==='rematch-requested'){ setSyncingAction(false); setRematchStatus('waiting') }
   }
 
   function sendGuestCommand(command,values={}){
@@ -326,7 +347,11 @@ export default function OnlineApp() {
     later(()=>{ setResolving(false); resolvingRef.current=false },760+result.revealOrder.length*520)
   }
   function requestResolution(){ if(connectionState==='closed')return; if(role==='host')beginResolutionHost(); else sendGuestCommand('resolve') }
-  function requestReplay(){ if(connectionState==='closed')return; if(role==='host')startMatch(); else sendGuestCommand('replay') }
+  function requestReplay(){
+    if(connectionState==='closed')return
+    if(role==='host')startMatch()
+    else if(rematchStatus!=='waiting'&&sendGuestCommand('replay'))setRematchStatus('sending')
+  }
 
   async function shareInvite(){
     const code=roomRef.current || roomCode
@@ -368,7 +393,7 @@ export default function OnlineApp() {
       <div className="current-area"><PlayerHand player={me} playerId={playerId} isCurrent={myTurn} selectedAction={selectedAction} wildSide={wildSide} onSelectAction={selectAction} onFlipWild={()=>{if(connectionState==='closed')return;setWildSide((side)=>side==='NOT'?'EMPTY':'NOT');sound('flip')}} onDragAction={handleDrag} dealing={dealing}/>{selectedAction&&myTurn&&<div className="placement-hint">카드를 빈 슬롯으로 끌거나 슬롯을 클릭하세요. <button onClick={()=>setSelectedAction(null)}>취소</button></div>}</div>
     </div>}
 
-    <AnimatePresence>{coinVisible&&<CoinOverlay winnerId={game.coinWinner} onDone={()=>setCoinVisible(false)}/>} {dealing&&<motion.div className="deal-banner" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}><span>SHUFFLE / DEAL</span><strong>{MAP_BY_ID[game.mapId].level===1?'4':'5'} CARDS EACH</strong></motion.div>} {game.phase==='finished'&&<OnlineResult game={game} playerId={playerId} role={role} onReplay={requestReplay} onMenu={leave}/>}</AnimatePresence>
+    <AnimatePresence>{coinVisible&&<CoinOverlay winnerId={game.coinWinner} onDone={()=>setCoinVisible(false)}/>} {dealing&&<motion.div className="deal-banner" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}><span>SHUFFLE / DEAL</span><strong>{MAP_BY_ID[game.mapId].level===1?'4':'5'} CARDS EACH</strong></motion.div>} {game.phase==='finished'&&<OnlineResult game={game} playerId={playerId} role={role} rematchRequested={rematchRequested} rematchStatus={rematchStatus} onReplay={requestReplay} onMenu={leave}/>}</AnimatePresence>
     {!connected&&<div className="disconnect-banner">{connectionState==='closed'?'방이 종료되었습니다.':'연결이 불안정하지만 계속 선택할 수 있습니다. 행동은 연결이 돌아오면 자동 전달됩니다.'}</div>}
     {syncingAction&&connected&&<div className="sync-banner"><i/><span>상대 기기에 행동을 동기화하는 중…</span></div>}
     {copied&&<div className="copy-toast">초대 문구 · 방 코드 · 링크 복사됨</div>}
