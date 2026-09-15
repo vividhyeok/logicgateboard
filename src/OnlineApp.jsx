@@ -35,11 +35,10 @@ function normalizeRemoteGame(game) {
   }
 }
 
-function OpponentPrivate({ playerId, isCurrent, roleLabel }) {
+function OpponentPrivate({ isCurrent }) {
   return <section className={`opponent-private ${isCurrent ? 'is-current' : ''}`}>
-    <span className={`player-pip player-${playerId + 1}`}/>
-    <div><strong>상대 · PLAYER {playerId + 1} · {roleLabel}</strong><small>상대 손패 비공개</small></div>
-    {isCurrent && <em>TURN</em>}
+    <div><strong>{isCurrent?'상대가 카드를 고르는 중':'상대 카드'}</strong><small>내용은 공개되지 않습니다.</small></div>
+    {isCurrent && <em>상대 차례</em>}
   </section>
 }
 
@@ -54,10 +53,10 @@ function IdentityStrip({ playerId, role, roomCode }) {
 
 function OnlineLanding({ onHost, onJoin, roomCode, setRoomCode }) {
   return <main className="online-landing">
-    <header className="online-hero"><div><span>ONLINE 2 PLAYER</span><h1>PC · 태블릿 · 폰에서<br/><em>각자 자기 패로.</em></h1><p>한 명이 방을 만들고 코드를 공유하면 서로 다른 기기에서 바로 플레이할 수 있습니다.</p></div><div className="online-hero-tools"><a href="/" className="online-back-link">← 다른 게임 모드</a></div></header>
+    <header className="online-hero"><div><span>친구와 하기</span><h1>방을 만들거나<br/><em>친구 방에 참가하세요.</em></h1></div><div className="online-hero-tools"><a href="/" className="online-back-link">← 처음으로</a></div></header>
     <section className="online-connect-grid">
-      <div className="online-panel host-panel"><span className="eyebrow">HOST A GAME · PLAYER 1</span><h2>친구와 새 방 만들기</h2><p className="room-first-copy">먼저 방을 만든 뒤, 친구가 들어오면 함께 플레이할 맵을 고릅니다.</p><button className="online-primary" onClick={onHost}>PLAYER 1로 방 만들기</button></div>
-      <div className="online-panel join-panel"><span className="eyebrow">JOIN A GAME · PLAYER 2</span><h2>친구 방 들어가기</h2><p>초대 링크를 열면 자동 접속됩니다. 코드만 받았다면 아래 6자리를 입력하세요.</p><label>ROOM CODE<input value={roomCode} onChange={(event)=>setRoomCode(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6))} placeholder="ABC234" maxLength={6} autoCapitalize="characters" inputMode="text"/></label><button className="online-primary secondary" disabled={roomCode.length < 6} onClick={()=>onJoin(roomCode)}>PLAYER 2로 입장하기</button><div className="online-note"><strong>재연결 지원</strong><span>잠깐 네트워크가 끊겨도 방과 마지막 게임 상태를 유지하고 같은 링크에서 재접속합니다.</span></div></div>
+      <div className="online-panel host-panel"><h2>새 방 만들기</h2><p className="room-first-copy">방을 만들고 초대 링크를 보내세요. 맵은 친구가 들어온 뒤 고릅니다.</p><button className="online-primary" onClick={onHost}>방 만들기</button></div>
+      <div className="online-panel join-panel"><h2>방 참가하기</h2><p>초대 링크를 열거나 받은 방 코드를 입력하세요.</p><label>방 코드<input value={roomCode} onChange={(event)=>setRoomCode(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6))} placeholder="ABC234" maxLength={6} autoCapitalize="characters" inputMode="text"/></label><button className="online-primary secondary" disabled={roomCode.length < 6} onClick={()=>onJoin(roomCode)}>참가하기</button></div>
     </section>
   </main>
 }
@@ -66,9 +65,13 @@ function Lobby({ role, playerId, roomCode, connected, connectionState, disconnec
   const [level, setLevel] = useState(MAP_BY_ID[mapId]?.level || 1)
   const map = MAP_BY_ID[mapId]
   const maps = MAPS.filter((item)=>item.level===level)
-  const opponentId = 1 - playerId
-  const stateText = connected ? `PLAYER ${opponentId + 1} CONNECTED` : connectionState === 'reconnecting' ? `PLAYER ${opponentId + 1} 재연결 대기 중` : `WAITING FOR PLAYER ${opponentId + 1}`
-  return <main className="online-lobby"><div className={`lobby-card ${role==='host'?'map-selector-lobby':''}`}><div className="lobby-status"><span className={connected?'dot live':'dot'}/>{stateText}</div><IdentityStrip playerId={playerId} role={role} roomCode={roomCode}/><span className="eyebrow">ONLINE ROOM CODE</span><h1>{roomCode}</h1>{role==='host'?<><div className="lobby-map-heading"><strong>플레이할 맵 선택</strong><small>방장이 선택하면 상대 화면에도 바로 반영됩니다.</small></div><div className="online-level-tabs">{[1,2].map((item)=><button key={item} className={level===item?'active':''} onClick={()=>setLevel(item)}>LEVEL {item}</button>)}</div><div className="online-map-list lobby-map-list">{maps.map((item)=><button key={item.id} className={mapId===item.id?'active':''} onClick={()=>onMapChange(item.id)}><div><MapPreview map={item}/></div><span><b>{item.code}</b>{item.name}</span></button>)}</div><div className="lobby-host-actions"><button className="copy-invite share-invite" onClick={onShare}>초대 링크 공유</button><button className="online-primary" disabled={!connected} onClick={onStart}>{connected?`${map?.name} 시작`:'상대 접속 대기 중'}</button></div></>:<>{map&&<div className="lobby-map"><div><MapPreview map={map}/></div><span>{map.code} · {map.name}</span></div>}<p>{connected?'방장이 맵을 고르고 있습니다. 선택이 끝나면 자동으로 시작됩니다.':'방에 연결하는 중입니다.'}</p><div className="lobby-loader"><i/><i/><i/></div></>}{disconnectCount>0&&<div className="reconnect-note">연결 복구 중 · 방 상태는 그대로 유지됩니다.</div>}{error&&<div className="online-error">{error}</div>}<div className="lobby-actions"><button className="text-exit" onClick={onLeave}>나가기</button></div></div></main>
+  const stateText = connected ? '친구가 들어왔습니다' : connectionState === 'reconnecting' ? '친구의 재연결을 기다리는 중' : '친구를 기다리는 중'
+  return <main className="online-lobby"><div className={`lobby-card ${role==='host'?'map-selector-lobby':''}`}>
+    <div className="lobby-status"><span className={connected?'dot live':'dot'}/>{stateText}</div>
+    <span className="eyebrow">방 코드</span><h1>{roomCode}</h1>
+    {role==='host'?<><div className="lobby-map-heading"><strong>맵 선택</strong><small>선택한 맵이 친구 화면에도 바로 보입니다.</small></div><div className="online-level-tabs">{[1,2].map((item)=><button key={item} className={level===item?'active':''} onClick={()=>setLevel(item)}>난이도 {item}</button>)}</div><div className="online-map-list lobby-map-list">{maps.map((item)=><button key={item.id} className={mapId===item.id?'active':''} onClick={()=>onMapChange(item.id)}><div><MapPreview map={item}/></div><span><b>{item.code}</b>{item.name}</span></button>)}</div><div className="lobby-host-actions"><button className="copy-invite share-invite" onClick={onShare}>초대 링크 보내기</button><button className="online-primary" disabled={!connected} onClick={onStart}>{connected?`${map?.name} 시작`:'친구를 기다리는 중'}</button></div></>:<>{map&&<div className="lobby-map"><div><MapPreview map={map}/></div><span>{map.name}</span></div>}<p>{connected?'방장이 맵을 고르고 있습니다.':'방에 연결하는 중입니다.'}</p><div className="lobby-loader"><i/><i/><i/></div></>}
+    {disconnectCount>0&&<div className="reconnect-note">연결 복구 중 · 방 상태는 유지됩니다.</div>}{error&&<div className="online-error">{error}</div>}<div className="lobby-actions"><button className="text-exit" onClick={onLeave}>처음으로</button></div>
+  </div></main>
 }
 
 function WaitingPanel({ children }) { return <motion.div className="phase-panel online-waiting" initial={{opacity:0,y:12}} animate={{opacity:1,y:0}}><span className="eyebrow">OPPONENT ACTION</span><h2>{children}</h2><div className="loader-line"/></motion.div> }
@@ -83,7 +86,7 @@ function OnlineResult({ game, playerId, role, onReplay, onChooseMap, onMenu }) {
       <motion.h2 id="online-result-title" initial={{opacity:0,scale:.9}} animate={{opacity:1,scale:1}} transition={{delay:.24}}>{won?'당신이 이겼습니다!':'상대가 이겼습니다'}</motion.h2>
       <motion.div className="result-output-orb" initial={{scale:0,rotate:-20}} animate={{scale:1,rotate:0}} transition={{delay:.3,type:'spring',stiffness:280,damping:18}}><small>FINAL OUTPUT</small><strong>{game.result?.output}</strong></motion.div>
       <div className="result-player-summary">
-        {[0,1].map((id)=><motion.div key={id} className={`${winner===id?'winner':''} ${playerId===id?'is-me':''}`} initial={{opacity:0,x:id===0?-18:18}} animate={{opacity:1,x:0}} transition={{delay:.38+id*.08}}><span>{playerId===id?'YOU':`PLAYER ${id+1}`}</span><b>TARGET {game.players[id]?.target}</b><em>{winner===id?'WIN':'LOSE'}</em></motion.div>)}
+        {[playerId,1-playerId].map((id,index)=><motion.div key={id} className={`${winner===id?'winner':''} ${playerId===id?'is-me':''}`} initial={{opacity:0,x:index===0?-18:18}} animate={{opacity:1,x:0}} transition={{delay:.38+index*.08}}><span>{playerId===id?'나':'상대'}</span><b>목표 {game.players[id]?.target}</b><em>{winner===id?'승리':'패배'}</em></motion.div>)}
       </div>
       {role==='host'?<div className="result-actions-online host-result-actions"><button className="online-primary" onClick={onReplay}>이 맵 다시 하기</button><button className="online-secondary-button choose-map-button" onClick={onChooseMap}>다른 맵 선택</button><button className="online-secondary-button" onClick={onMenu}>방 나가기</button></div>:<><p className="rematch-notice waiting"><i/> 방장이 다음 게임을 고르는 중입니다.</p><div className="result-actions-online guest-result-actions"><button className="online-secondary-button" onClick={onMenu}>방 나가기</button></div></>}
     </motion.div>
@@ -384,23 +387,22 @@ export default function OnlineApp() {
 
   const me=game.players[playerId]
   const myTurn=connectionState!=='closed'&&!syncingAction&&game.phase==='play'&&game.currentPlayer===playerId&&!dealing&&!resolving
-  const phaseText=game.phase==='target_choice'?'TARGET 선택':game.phase==='input_selection'?'비밀 INPUT 설정':game.phase==='play'?`TURN ${game.turnNumber+1}`:game.phase==='reveal'?(resolving?'신호 계산 중':'회로 완성'):'RESULT'
+  const phaseText=game.phase==='target_choice'?'목표 선택':game.phase==='input_selection'?'비밀 INPUT':game.phase==='play'?(myTurn?'내 차례':'상대 차례'):game.phase==='reveal'?'회로 계산 중':'게임 종료'
   const connectionLabel=connected?'CONNECTED':connectionState==='reconnecting'?'RECONNECTING…':connectionState==='closed'?'ROOM CLOSED':'CONNECTING…'
   return <LayoutGroup><main className="game-page online-game-page">
-    <header className="online-game-bar"><button onClick={leave}>← 나가기</button><div><span>ONLINE ROOM {roomCode}</span><strong>YOU: PLAYER {playerId+1} · {role.toUpperCase()} / OPPONENT: PLAYER {opponentId+1} · {role==='host'?'GUEST':'HOST'}</strong></div><div className={`connection-chip ${connected?'live':''}`}>{connectionLabel}</div></header>
-    <IdentityStrip playerId={playerId} role={role} roomCode={roomCode}/>
-    <section className="status-row"><div className={`target-badge player-1 ${game.currentPlayer===0?'current':''}`}><span>{playerId===0?'YOU · ':'OPPONENT · '}P1 TARGET</span><strong>{game.players[0].target??'?'}</strong></div><div className="phase-status"><span>{phaseText}</span><strong>{game.phase==='play'?`PLAYER ${game.currentPlayer+1} 차례`:map.description}</strong>{disconnectCount>0&&<small>재연결 {disconnectCount}회</small>}</div><div className={`target-badge player-2 ${game.currentPlayer===1?'current':''}`}><span>{playerId===1?'YOU · ':'OPPONENT · '}P2 TARGET</span><strong>{game.players[1].target??'?'}</strong></div></section>
+    <header className="online-game-bar simplified"><button onClick={leave}>← 처음으로</button><div><strong>{map.name}</strong></div>{!connected?<div className="connection-chip">{connectionLabel}</div>:<span/>}</header>
+    <section className={`status-row focus-status ${myTurn?'is-my-turn':'is-opponent-turn'}`}><div className={`target-badge player-${playerId+1} ${myTurn?'current':''}`}><span>내 목표</span><strong>{game.players[playerId].target??'?'}</strong></div><div className="phase-status"><span>{phaseText}</span><strong>{game.phase==='play'?(myTurn?'카드를 선택해 빈칸에 놓으세요':'상대가 카드를 놓을 때까지 기다리세요'):map.description}</strong></div><div className={`target-badge player-${opponentId+1} ${game.phase==='play'&&!myTurn?'current':''}`}><span>상대 목표</span><strong>{game.players[opponentId].target??'?'}</strong></div></section>
 
-    {game.phase==='target_choice'&&!coinVisible&&(game.targetChooser===playerId?<TargetChoice playerId={playerId} onChoose={handleTarget}/>:<WaitingPanel>상대가 TARGET을 고르는 중...</WaitingPanel>)}
-    {game.phase==='input_selection'&&(inputPlayer===playerId?<InputChoice game={game} playerId={playerId} draft={inputDraft} onChange={(id,value)=>setInputDraft((draft)=>({...draft,[id]:value}))} onSubmit={submitInputs}/>:<WaitingPanel>상대가 비밀 INPUT을 설정하는 중...</WaitingPanel>)}
+    {game.phase==='target_choice'&&!coinVisible&&(game.targetChooser===playerId?<TargetChoice playerId={playerId} personal onChoose={handleTarget}/>:<WaitingPanel>상대가 목표를 고르는 중입니다.</WaitingPanel>)}
+    {game.phase==='input_selection'&&(inputPlayer===playerId?<InputChoice game={game} playerId={playerId} personal draft={inputDraft} onChange={(id,value)=>setInputDraft((draft)=>({...draft,[id]:value}))} onSubmit={submitInputs}/>:<WaitingPanel>상대가 비밀 INPUT을 정하는 중입니다.</WaitingPanel>)}
 
     {(game.phase==='play'||game.phase==='reveal'||game.phase==='finished')&&<div className="table-layout online-table-layout">
-      <div className="opponent-area"><OpponentPrivate playerId={opponentId} roleLabel={role==='host'?'GUEST':'HOST'} isCurrent={game.phase==='play'&&game.currentPlayer===opponentId}/></div>
+      <div className="opponent-area"><OpponentPrivate isCurrent={game.phase==='play'&&game.currentPlayer===opponentId}/></div>
       <div className="board-zone"><div className="deck-floating"><DeckStack count={game.deck?.length??0} dealing={dealing}/></div><GameBoard map={map} game={game} viewerId={playerId} selectedAction={selectedAction} onSlotClick={placeAction} revealAllInputs={game.phase==='reveal'||game.phase==='finished'||resolving} solution={solution||game.result} revealIndex={game.phase==='finished'?999:revealIndex} resolving={resolving}/></div>
-      <div className="current-area"><PlayerHand player={me} playerId={playerId} isCurrent={myTurn} selectedAction={selectedAction} wildSide={wildSide} onSelectAction={selectAction} onFlipWild={()=>{if(connectionState==='closed')return;setWildSide((side)=>side==='NOT'?'EMPTY':'NOT');sound('flip')}} onDragAction={handleDrag} dealing={dealing}/>{selectedAction&&myTurn&&<div className="placement-hint">카드를 빈 슬롯으로 끌거나 슬롯을 클릭하세요. <button onClick={()=>setSelectedAction(null)}>취소</button></div>}</div>
+      <div className="current-area"><PlayerHand player={me} playerId={playerId} label="내 카드" isCurrent={myTurn} selectedAction={selectedAction} wildSide={wildSide} onSelectAction={selectAction} onFlipWild={()=>{if(connectionState==='closed')return;setWildSide((side)=>side==='NOT'?'EMPTY':'NOT');sound('flip')}} onDragAction={handleDrag} dealing={dealing}/>{selectedAction&&myTurn&&<div className="placement-hint">빛나는 빈칸에 놓으세요. <button onClick={()=>setSelectedAction(null)}>취소</button></div>}</div>
     </div>}
 
-    <AnimatePresence>{coinVisible&&<CoinOverlay winnerId={game.coinWinner} onDone={()=>setCoinVisible(false)}/>} {dealing&&<motion.div className="deal-banner" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}><span>SHUFFLE / DEAL</span><strong>{MAP_BY_ID[game.mapId].level===1?'4':'5'} CARDS EACH</strong></motion.div>} {game.phase==='finished'&&<OnlineResult game={game} playerId={playerId} role={role} onReplay={requestReplay} onChooseMap={chooseAnotherMap} onMenu={leave}/>}</AnimatePresence>
+    <AnimatePresence>{coinVisible&&<CoinOverlay winnerId={game.coinWinner} viewerId={playerId} onDone={()=>setCoinVisible(false)}/>} {dealing&&<motion.div className="deal-banner" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}><span>카드 준비 중</span><strong>잠시만 기다려 주세요</strong></motion.div>} {game.phase==='finished'&&<OnlineResult game={game} playerId={playerId} role={role} onReplay={requestReplay} onChooseMap={chooseAnotherMap} onMenu={leave}/>}</AnimatePresence>
     {!connected&&<div className="disconnect-banner">{connectionState==='closed'?'방이 종료되었습니다.':'연결이 불안정하지만 계속 선택할 수 있습니다. 행동은 연결이 돌아오면 자동 전달됩니다.'}</div>}
     {syncingAction&&connected&&<div className="sync-banner"><i/><span>상대 기기에 행동을 동기화하는 중…</span></div>}
     {copied&&<div className="copy-toast">초대 문구 · 방 코드 · 링크 복사됨</div>}

@@ -127,6 +127,12 @@
 .online-game-page .player-hand.is-current {
   animation: current-player-breathe 2.2s ease-in-out infinite;
 }
+.online-game-bar.simplified { grid-template-columns: auto 1fr auto; max-width: 1120px; margin-left: auto; margin-right: auto; }
+.online-game-bar.simplified > div { text-align: center; }
+.online-game-bar.simplified > span { width: 82px; }
+.focus-status.is-opponent-turn ~ .online-table-layout .current-area { opacity: .68; filter: saturate(.72); }
+.focus-status.is-my-turn ~ .online-table-layout .opponent-area { opacity: .58; }
+.opponent-private.is-current { color: #f3ece0; }
 .online-game-page .card-slot.legal::after {
   animation: legal-slot-charge 1.15s ease-in-out infinite;
 }

@@ -19,6 +19,13 @@
 .phase-status > span { display: block; color: var(--yellow); font: 700 9px/1 'IBM Plex Mono'; letter-spacing: .12em; }
 .phase-status > strong { display: block; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; color: #ddd5ca; }
 .phase-status > small { display: block; color: var(--muted); font: 600 8px/1 'IBM Plex Mono'; margin-top: 4px; }
+.focus-status { padding: 8px 10px; border: 1px solid transparent; border-radius: 16px; transition: .2s ease; }
+.focus-status .phase-status > span { font-size: 15px; letter-spacing: 0; }
+.focus-status .phase-status > strong { margin-top: 6px; font-size: 12px; }
+.focus-status.is-my-turn { border-color: rgba(255,211,66,.5); background: rgba(255,211,66,.07); box-shadow: 0 0 28px rgba(255,211,66,.08); }
+.focus-status.is-my-turn .phase-status > span { color: var(--yellow); }
+.focus-status.is-opponent-turn { border-color: rgba(255,255,255,.08); background: rgba(0,0,0,.12); }
+.focus-status.is-opponent-turn .phase-status > span { color: #a8a096; }
 .thinking-dots i { color: var(--yellow); font-style: normal; animation: blinkDots 1s infinite steps(3); }
 @keyframes blinkDots { 0% { opacity: .25; } 50% { opacity: 1; } 100% { opacity: .25; } }
 
@@ -70,10 +77,17 @@
 }
 .board-canvas::before { content: ''; position: absolute; inset: 8px; border: 1px solid rgba(52,45,37,.14); border-radius: 7px; pointer-events: none; z-index: 1; }
 .board-wires { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; z-index: 2; }
-.board-wire-base { fill: none; stroke: #4d4740; stroke-width: 4; vector-effect: non-scaling-stroke; stroke-linecap: square; stroke-linejoin: round; }
+.board-wire-outline { fill: none; stroke: rgba(255,255,255,.82); stroke-width: 8; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }
+.board-wire-base { fill: none; stroke: #4d4740; stroke-width: 4; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }
+.wire-label-bg { fill: #29251f; stroke: rgba(255,255,255,.75); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.wire-label { fill: #fff8ec; font: 800 10px/1 'IBM Plex Mono'; text-anchor: middle; dominant-baseline: middle; paint-order: stroke; stroke: #29251f; stroke-width: 2px; }
+.wire-group.active .wire-label-bg { fill: #11100e; stroke: #ffd342; }
+.wire-group.active .wire-label { fill: #ffd342; }
 .board-wire-signal { fill: none; stroke-width: 6; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; filter: url(#wireGlow); }
 .signal-path-1 { stroke: #f3bf20; }
 .signal-path-0 { stroke: #438fe8; }
+.home-tile { text-decoration: none; font-size: 30px; }
+.solo-controls { grid-template-columns: minmax(280px,520px); }
 .circuit-trace { position: absolute; z-index: 32; left: 50%; top: 10px; transform: translateX(-50%); width: min(520px,calc(100% - 24px)); min-height: 58px; padding: 10px 14px; border: 1px solid rgba(42,38,32,.28); border-radius: 13px; background: rgba(18,16,13,.92); color: #f4eee4; box-shadow: 0 10px 30px rgba(0,0,0,.24); text-align: center; pointer-events: none; backdrop-filter: blur(8px); }
 .circuit-trace span { display: block; color: var(--yellow); font: 800 8px/1 'IBM Plex Mono'; letter-spacing: .11em; }
 .circuit-trace strong { display: block; margin-top: 6px; font: 800 clamp(11px,1.5vw,15px)/1.25 'IBM Plex Mono'; }
