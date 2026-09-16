@@ -2,11 +2,11 @@ import React, { useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { CardBack, DeckStack } from './components.jsx'
 import { sound } from './audio.js'
-import './setup-hand.css'
 
 function SetupValueCard({ inputId, value, order, selected, onSelect, onDragStart, onDrop }) {
   return <motion.button
     type="button"
+    layoutId={`input-card-${inputId}-${value}`}
     className={`input-choice-card setup-value-card ${selected ? 'setup-selected' : ''}`}
     data-input-id={inputId}
     onClick={onSelect}
@@ -34,7 +34,7 @@ export function SetupOpponentHand({ game, playerId, active = false }) {
   </section>
 }
 
-export function SetupHand({ game, playerId, draft, selected, onSelect, onPlace, onSubmit, personal = false }) {
+export function SetupHand({ game, playerId, draft, selected, onSelect, onPlace, onSubmit, personal = false, disabled = false }) {
   const assigned = game.players[playerId].assignedInputs
   const complete = assigned.every((id) => draft[id] !== undefined)
 
@@ -68,14 +68,14 @@ export function SetupHand({ game, playerId, draft, selected, onSelect, onPlace, 
             <div className="setup-pair-cards">{[0, 1].map((value) => <div className="setup-card-slot" key={value}>
               {placedValue === value
                 ? <div className="setup-card-placeholder"><span>{value}</span><small>보드에 놓음</small></div>
-                : <SetupValueCard inputId={id} value={value} order={pairIndex * 2 + value} selected={selected?.id === id && selected.value === value} onSelect={() => onSelect(selected?.id === id && selected.value === value ? null : { id, value })} onDragStart={() => onSelect({ id, value })} onDrop={(event, info) => dropCard(id, value, event, info)} />}
+                : <SetupValueCard inputId={id} value={value} order={pairIndex * 2 + value} selected={selected?.id === id && selected.value === value} onSelect={() => { onPlace(id, value); onSelect(null); sound('place') }} onDragStart={() => onSelect({ id, value })} onDrop={(event, info) => { dropCard(id, value, event, info); onSelect(null) }} />}
             </div>)}</div>
           </div>
         })}
       </div>
       <div className="setup-confirm">
-        <span>{selected ? `${selected.value} 카드를 ${selected.id}에 놓으세요` : complete ? '입력 카드 배치 완료' : '카드를 드래그하거나 선택 후 보드에 놓으세요'}</span>
-        <motion.button type="button" className="primary-button" disabled={!complete || Boolean(selected)} onClick={onSubmit} animate={complete && !selected ? { scale: [1, 1.025, 1] } : { scale: 1 }} transition={{ duration: .34 }}>입력 확정</motion.button>
+        <span>{selected ? `${selected.value} 카드를 ${selected.id}에 놓으세요` : complete ? '확정 전에는 다른 값으로 바꿀 수 있어요' : '0 또는 1을 누르면 내 자리에 바로 놓입니다'}</span>
+        <motion.button type="button" className="primary-button" disabled={disabled || !complete || Boolean(selected)} onClick={onSubmit} animate={complete && !selected ? { scale: [1, 1.025, 1] } : { scale: 1 }} transition={{ duration: .34 }}>입력 확정</motion.button>
       </div>
     </div>
   </section>

@@ -157,6 +157,7 @@ export function createHostPeer(code, handlers = {}) {
   ;(async () => {
     try {
       const existing = await get(refs.meta)
+      if (closed) return
       if (!existing.exists()) {
         await set(refs.meta, {
           code: String(code).trim().toUpperCase(),
@@ -168,6 +169,7 @@ export function createHostPeer(code, handlers = {}) {
         await update(refs.meta, { transport: 'firebase-rtdb', lastHostSeenAt: serverTimestamp() })
       }
 
+      if (closed) return
       unsubscribers.push(onValue(refs.infoConnected, async (snapshot) => {
         if (closed || snapshot.val() !== true) return
         try {
@@ -260,13 +262,15 @@ export function createGuestPeer(code, handlers = {}) {
   let hostPollTimer = null
   let lastHostHeartbeat = 0
   let lastHostMessageId = null
+  let lastHostMessageAt = 0
   const unsubscribers = []
   const pendingCommands = new Map()
 
   function applyHostMessage(snapshot) {
     const message = snapshot.val()
-    if (!message?.id || message.id === lastHostMessageId) return
+    if (closed || !message?.id || message.id === lastHostMessageId || Number(message.sentAt || 0) < lastHostMessageAt) return
     lastHostMessageId = message.id
+    lastHostMessageAt = Number(message.sentAt || 0)
     handlers.onData?.(message.payload)
   }
 
@@ -313,6 +317,7 @@ export function createGuestPeer(code, handlers = {}) {
   ;(async () => {
     try {
       const roomSnapshot = await get(refs.meta)
+      if (closed) return
       if (!roomSnapshot.exists()) {
         const error = new Error('방을 찾을 수 없습니다.')
         error.code = 'room-not-found'

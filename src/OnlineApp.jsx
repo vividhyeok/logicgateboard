@@ -1,13 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion'
-import { CoinOverlay, DeckStack, GameBoard, InputChoice, MapPreview, PlayerHand, TargetChoice } from './components.jsx'
-import { RULES_VERSION, chooseTarget, createGame, finishGame, nextInputPlayer, playMove, recordFromGame, resolveGame, setPlayerInputs } from './game.js'
+import { CoinOverlay, GameBoard, MapPreview, PlayerHand, TargetChoice } from './components.jsx'
+import { SetupHand, SetupOpponentHand } from './SetupHand.jsx'
+import { GameHelp } from './GameHelp.jsx'
+import { useDialogFocus } from './useDialogFocus.js'
+import { readStored, writeStored } from './storage.js'
+import { RULES_VERSION, chooseTarget, createGame, finishGame, nextInputPlayer, legalSlotIds, playMove, recordFromGame, resolveGame, setPlayerInputs } from './game.js'
 import { MAPS, MAP_BY_ID } from './maps.js'
 import { setSoundEnabled, sound } from './audio.js'
 import { createGuestPeer, createHostPeer, inviteUrl, makeRoomCode, snapshotForPlayer } from './online.js'
-import './online.css'
-import './online-polish.css'
 
 const STORAGE_KEY = 'logic-gate-duel-playtests-v2'
 const PARAMS = new URLSearchParams(window.location.search)
@@ -15,7 +17,7 @@ const ROOM_PARAM = PARAMS.get('room')?.toUpperCase() || ''
 const HOST_PARAM = PARAMS.get('host')?.toUpperCase() || ''
 const HOST_RECOVERY_PREFIX = 'logic-gate-duel-host-room:'
 
-function readRecords() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]') } catch { return [] } }
+function readRecords() { try { const records=JSON.parse(readStored(STORAGE_KEY, '[]')); return Array.isArray(records)?records:[] } catch { return [] } }
 function hostRecoveryKey(code) { return `${HOST_RECOVERY_PREFIX}${String(code).toUpperCase()}` }
 function readHostRecovery(code) { try { return JSON.parse(localStorage.getItem(hostRecoveryKey(code)) || 'null') } catch { return null } }
 function normalizeRemoteGame(game) {
@@ -78,10 +80,11 @@ function WaitingPanel({ children }) { return <motion.div className="phase-panel 
 
 function OnlineResult({ game, playerId, role, onReplay, onChooseMap, onMenu }) {
   const [inspect, setInspect] = useState(false)
+  const dialogRef = useDialogFocus(!inspect)
   const won = game.result?.winner === playerId
   if (inspect) return <button className="show-result-button" onClick={() => setInspect(false)}>결과 다시 보기</button>
   const winner = game.result?.winner ?? 0
-  return createPortal(<motion.div className="online-result-overlay" role="dialog" aria-modal="true" aria-labelledby="online-result-title" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} transition={{duration:.28}}>
+  return createPortal(<motion.div ref={dialogRef} className="online-result-overlay" role="dialog" aria-modal="true" aria-labelledby="online-result-title" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} transition={{duration:.28}}>
     <div className={`result-burst ${won?'win-burst':'lose-burst'}`}/>
     <motion.div className={`online-result-card ${won?'won':'lost'}`} initial={{scale:.76,y:42,rotateX:10}} animate={{scale:1,y:0,rotateX:0}} exit={{scale:.9,opacity:0}} transition={{type:'spring',stiffness:240,damping:21}}>
       <motion.span initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} transition={{delay:.18}}>{won?'승리':'패배'}</motion.span>
@@ -110,6 +113,8 @@ export default function OnlineApp() {
   const [selectedAction,setSelectedAction] = useState(null)
   const [wildSide,setWildSide] = useState('NOT')
   const [inputDraft,setInputDraft] = useState({})
+  const [inputSelected,setInputSelected] = useState(null)
+  const [soundOn,setSoundOn] = useState(() => readStored('logic-gate-duel-sound') !== 'off')
   const [coinVisible,setCoinVisible] = useState(false)
   const [dealing,setDealing] = useState(false)
   const [solution,setSolution] = useState(null)
@@ -136,8 +141,9 @@ export default function OnlineApp() {
   const inputPlayer = game?.phase === 'input_selection' ? nextInputPlayer(game) : null
   const onlineRecords = records.filter((record)=>record.mode==='online'||record.online)
 
-  useEffect(()=>{ setSoundEnabled(true) },[])
+  useEffect(()=>{ setSoundEnabled(soundOn); writeStored('logic-gate-duel-sound',soundOn?'on':'off') },[soundOn])
   useEffect(()=>()=>cleanup(),[])
+  useEffect(()=>{ const cancel=event=>{if(event.key==='Escape')setSelectedAction(null)}; window.addEventListener('keydown',cancel); return()=>window.removeEventListener('keydown',cancel) },[])
   useEffect(()=>{
     if(HOST_PARAM) resumeHostRoom(HOST_PARAM)
     else if(ROOM_PARAM) joinRoom(ROOM_PARAM)
@@ -169,7 +175,7 @@ export default function OnlineApp() {
   function clearHostRecovery(code=roomRef.current){ try{ localStorage.removeItem(hostRecoveryKey(code)) }catch{} }
 
   function setDealPulse(){ setDealing(true); later(()=>setDealing(false),1100) }
-  function showStart(snapshot){ const normalized=normalizeRemoteGame(snapshot); setGame(normalized); setScreen('game'); setSelectedAction(null); setInputDraft({}); setWildSide('NOT'); setSolution(null); setRevealIndex(-1); setResolving(false); setSyncingAction(false); setRematchRequested(false); setRematchStatus('idle'); setCoinVisible(true); sound('turn') }
+  function showStart(snapshot){ clearTimers(); resolvingRef.current=false; setInputSelected(null); const normalized=normalizeRemoteGame(snapshot); setGame(normalized); setScreen('game'); setSelectedAction(null); setInputDraft({}); setWildSide('NOT'); setSolution(null); setRevealIndex(-1); setResolving(false); setSyncingAction(false); setRematchRequested(false); setRematchStatus('idle'); setCoinVisible(true); sound('turn') }
 
   function createHostSession(code,selectedMapId,{resumeGame=null}={}){
     const session=createHostPeer(code,{
@@ -178,7 +184,7 @@ export default function OnlineApp() {
         markConnected()
         const current=fullGameRef.current
         if(current) session.send({type:'state',game:snapshotForPlayer(current,1),meta:{reconnected:true}})
-        else session.send({type:'lobby',mapId:selectedMapId,roomCode:code})
+        else session.send({type:'lobby',mapId:mapRef.current,roomCode:code})
       },
       onDisconnected:markDisconnected,
       onError:markError,
@@ -280,8 +286,9 @@ export default function OnlineApp() {
     } else if(data.command==='inputs'){
       const next=setPlayerInputs(current,1,data.values||{}); if(next!==current)hostCommit(next,{deal:current.phase!=='play'&&next.phase==='play',sound:'flip'})
     } else if(data.command==='move'){
-      if(current.currentPlayer!==1)return; const next=playMove(current,data.slotId,data.action); if(next!==current)hostCommit(next,{sound:'place'})
+      if(current.currentPlayer!==1){sessionRef.current?.send({type:'state',game:snapshotForPlayer(current,1)});return} const next=playMove(current,data.slotId,data.action); if(next!==current)hostCommit(next,{sound:'place'})
     } else if(data.command==='resolve') beginResolutionHost()
+    if(data.command!=='resolve'&&fullGameRef.current===current)sessionRef.current?.send({type:'state',game:snapshotForPlayer(current,1),meta:{rejected:true}})
   }
 
   function handleGuestData(data){
@@ -297,14 +304,14 @@ export default function OnlineApp() {
   }
 
   function sendGuestCommand(command,values={}){
-    if(connectionState==='closed'||syncingAction)return false
+    if(!connected||syncingAction||!sessionRef.current)return false
     setSyncingAction(true)
     sessionRef.current?.send({type:'command',command,expectedRevision:Number(game?.revision||0),...values})
     return true
   }
 
   function handleTarget(value){
-    if(connectionState==='closed'||!game||game.targetChooser!==playerId)return
+    if(!connected||syncingAction||!game||game.targetChooser!==playerId)return
     if(role==='host'){ const next=chooseTarget(fullGameRef.current,0,value); if(next!==fullGameRef.current)hostCommit(next,{sound:'flip'}) }
     else sendGuestCommand('target',{value})
   }
@@ -319,9 +326,10 @@ export default function OnlineApp() {
     }
   }
 
-  function selectAction(action){ if(connectionState==='closed'||!game||game.phase!=='play'||game.currentPlayer!==playerId||dealing||resolving)return; setSelectedAction((current)=>current?.cardId===action.cardId&&current?.kind===action.kind?null:action) }
+  function selectAction(action){ if(!connected||syncingAction||!game||game.phase!=='play'||game.currentPlayer!==playerId||dealing||resolving)return; setSelectedAction((current)=>current?.cardId===action.cardId&&current?.kind===action.kind?null:action) }
   function placeAction(slotId,action=selectedAction){
-    if(connectionState==='closed'||!action||!game||game.phase!=='play'||game.currentPlayer!==playerId)return
+    if(!connected||syncingAction||dealing||resolving||!action||!game||game.phase!=='play'||game.currentPlayer!==playerId)return
+    if(!legalSlotIds(game,action,playerId).includes(slotId))return
     setSelectedAction(null)
     if(role==='host'){ const current=fullGameRef.current; const next=playMove(current,slotId,action); if(next!==current)hostCommit(next,{sound:'place'}) }
     else sendGuestCommand('move',{slotId,action})
@@ -364,7 +372,7 @@ export default function OnlineApp() {
   }
   function requestResolution(){ if(connectionState==='closed')return; if(role==='host')beginResolutionHost(); else sendGuestCommand('resolve') }
   function requestReplay(){
-    if(connectionState==='closed')return
+    if(!connected)return
     if(role==='host')startMatch()
   }
 
@@ -372,44 +380,46 @@ export default function OnlineApp() {
     const code=roomRef.current || roomCode
     const url=inviteUrl(code)
     const fullText=`LOGIC GATE DUEL 같이 하자!\n방 코드: ${code}\n너는 PLAYER 2로 입장해.\n바로 입장: ${url}`
-    try { await navigator.clipboard.writeText(fullText) } catch {}
-    setCopied(true); later(()=>setCopied(false),1800)
     if(navigator.share){
-      try { await navigator.share({ title:'LOGIC GATE DUEL', text:`LOGIC GATE DUEL 같이 하자!\n방 코드: ${code}\n너는 PLAYER 2로 입장해.`, url }) }
-      catch(error){ if(error?.name!=='AbortError') console.warn(error) }
+      try { await navigator.share({title:'LOGIC GATE DUEL',text:`방 코드: ${code}`,url}); return }
+      catch(error){ if(error?.name==='AbortError')return }
     }
+    try { await navigator.clipboard.writeText(fullText); setCopied(true); later(()=>setCopied(false),1800) }
+    catch { setError(`복사하지 못했습니다. 방 코드 ${code}를 친구에게 알려주세요.`) }
   }
   async function leave(){
+    if(game && game.phase !== 'finished' && !window.confirm('진행 중인 게임에서 나갈까요?'))return
     logAbandonedGame(); clearTimers()
     try{ if(role==='host')await sessionRef.current?.closeRoom?.(); else await sessionRef.current?.destroy?.() }catch{}
     if(role==='host')clearHostRecovery(); sessionRef.current=null
     const url=new URL(window.location.href); url.search=''; window.location.href=url.toString()
   }
 
-  if(screen==='landing')return <OnlineLanding onHost={createRoom} onJoin={joinRoom} roomCode={roomCode} setRoomCode={setRoomCode}/>
-  if(screen==='lobby'&&role&&playerId!==null)return <Lobby role={role} playerId={playerId} roomCode={roomCode} connected={connected} connectionState={connectionState} disconnectCount={disconnectCount} mapId={mapId} error={error} onMapChange={selectLobbyMap} onStart={()=>startMatch()} onShare={shareInvite} onLeave={leave}/>
+  if(screen==='landing')return <><OnlineLanding onHost={createRoom} onJoin={joinRoom} roomCode={roomCode} setRoomCode={setRoomCode}/>{error&&<div className="disconnect-banner" role="alert">{error}</div>}</>
+  if(screen==='lobby'&&role&&playerId!==null)return <><Lobby role={role} playerId={playerId} roomCode={roomCode} connected={connected} connectionState={connectionState} disconnectCount={disconnectCount} mapId={mapId} error={error} onMapChange={selectLobbyMap} onStart={()=>startMatch()} onShare={shareInvite} onLeave={leave}/>{copied&&<div className="copy-toast" role="status">초대 링크를 복사했어요</div>}</>
   if(!game||playerId===null||!role)return null
 
   const me=game.players[playerId]
-  const myTurn=connectionState!=='closed'&&!syncingAction&&game.phase==='play'&&game.currentPlayer===playerId&&!dealing&&!resolving
+  const myTurn=connected&&!syncingAction&&game.phase==='play'&&game.currentPlayer===playerId&&!dealing&&!resolving
   const phaseText=game.phase==='target_choice'?'목표 선택':game.phase==='input_selection'?'입력 카드':game.phase==='play'?(myTurn?'내 차례':'상대 차례'):game.phase==='reveal'?'계산 중':'게임 종료'
   const connectionLabel=connected?'CONNECTED':connectionState==='reconnecting'?'RECONNECTING…':connectionState==='closed'?'ROOM CLOSED':'CONNECTING…'
   return <LayoutGroup><main className="game-page online-game-page">
-    <header className="online-game-bar simplified"><button onClick={leave}>← 처음으로</button><div><strong>{map.name}</strong></div>{!connected?<div className="connection-chip">{connectionLabel}</div>:<span/>}</header>
-    <section className={`status-row focus-status ${myTurn?'is-my-turn':'is-opponent-turn'}`}><div className={`target-badge player-${playerId+1} ${myTurn?'current':''}`}><span>내 목표</span><strong>{game.players[playerId].target??'?'}</strong></div><div className="phase-status"><span>{phaseText}</span><strong>{game.phase==='play'?(myTurn?'카드를 골라 원하는 빈칸에 놓으세요':'상대가 카드를 놓을 때까지 기다리세요'):''}</strong></div><div className={`target-badge player-${opponentId+1} ${game.phase==='play'&&!myTurn?'current':''}`}><span>상대 목표</span><strong>{game.players[opponentId].target??'?'}</strong></div></section>
+    <header className="online-game-bar simplified"><button onClick={leave}>← 나가기</button><div><strong>{map.name}</strong></div><div className="topbar-right"><GameHelp/><button className="help-button" aria-pressed={soundOn} onClick={()=>setSoundOn(value=>!value)}>{soundOn?'소리 켜짐':'소리 꺼짐'}</button>{!connected&&<span className="connection-chip">{connectionLabel}</span>}</div></header>
+    <section className={`status-row focus-status ${myTurn?'is-my-turn':'is-opponent-turn'}`}><div className={`target-badge player-${playerId+1} ${myTurn?'current':''}`}><span>내 목표</span><strong>{game.players[playerId].target??'?'}</strong></div><div className="phase-status" role="status" aria-live="polite"><span>{phaseText}</span><strong>{game.phase==='play'?(myTurn?(selectedAction?'빛나는 자리에 놓으세요':'카드를 누르거나 보드로 드래그하세요'):'상대가 카드를 놓을 때까지 기다리세요'):''}</strong></div><div className={`target-badge player-${opponentId+1} ${game.phase==='play'&&!myTurn?'current':''}`}><span>상대 목표</span><strong>{game.players[opponentId].target??'?'}</strong></div></section>
 
     {game.phase==='target_choice'&&!coinVisible&&(game.targetChooser===playerId?<TargetChoice playerId={playerId} personal onChoose={handleTarget}/>:<WaitingPanel>상대가 목표를 고르는 중입니다.</WaitingPanel>)}
-    {game.phase==='input_selection'&&(inputPlayer===playerId?<InputChoice game={game} playerId={playerId} personal draft={inputDraft} onChange={(id,value)=>setInputDraft((draft)=>({...draft,[id]:value}))} onSubmit={submitInputs}/>:<WaitingPanel>상대가 입력 카드을 정하는 중입니다.</WaitingPanel>)}
+    {game.phase==='input_selection'&&<div className="table-layout setup-table"><div className="opponent-area"><SetupOpponentHand game={game} playerId={opponentId}/></div><div className="board-zone"><GameBoard map={map} game={game} viewerId={playerId} selectedAction={null} onSlotClick={()=>{}} inputSelection={inputPlayer===playerId?{playerId,draft:inputDraft,selected:inputSelected,onPlace:(id)=>setInputDraft(draft=>({...draft,[id]:draft[id]===undefined?0:1-draft[id]}))}:null}/></div><div className="current-area">{inputPlayer===playerId?<SetupHand game={game} playerId={playerId} personal draft={inputDraft} selected={inputSelected} onSelect={setInputSelected} onPlace={(id,value)=>{setInputDraft(draft=>({...draft,[id]:value}));setInputSelected(null)}} onSubmit={submitInputs} disabled={!connected||syncingAction}/>:<WaitingPanel>상대가 비밀 입력을 정하고 있어요</WaitingPanel>}</div></div>}
 
     {(game.phase==='play'||game.phase==='reveal'||game.phase==='finished')&&<div className="table-layout online-table-layout">
       <div className="opponent-area"><OpponentPrivate isCurrent={game.phase==='play'&&game.currentPlayer===opponentId}/></div>
       <div className="board-zone"><GameBoard map={map} game={game} viewerId={playerId} selectedAction={selectedAction} onSlotClick={placeAction} revealAllInputs={game.phase==='reveal'||game.phase==='finished'||resolving} solution={solution||game.result} revealIndex={game.phase==='finished'?999:revealIndex} resolving={resolving}/></div>
-      <div className="current-area"><PlayerHand game={game} player={me} playerId={playerId} label="내 카드" isCurrent={myTurn} selectedAction={selectedAction} wildSide={wildSide} onSelectAction={selectAction} onFlipWild={()=>{if(connectionState==='closed')return;const side=wildSide==='NOT'?'EMPTY':'NOT';setWildSide(side);setSelectedAction(action=>action?.kind==='wild'?{...action,side}:action);sound('flip')}} onDragAction={handleDrag} dealing={dealing}/>{selectedAction&&myTurn&&<div className="placement-hint">빛나는 빈칸에 놓으세요. <button onClick={()=>setSelectedAction(null)}>취소</button></div>}</div>
+      <div className="current-area"><PlayerHand game={game} player={me} playerId={playerId} label="내 카드" isCurrent={myTurn} selectedAction={selectedAction} wildSide={wildSide} onSelectAction={selectAction} onFlipWild={()=>{if(connectionState==='closed')return;const side=wildSide==='NOT'?'EMPTY':'NOT';setWildSide(side);setSelectedAction({kind:'wild',cardId:`wild-p${playerId}`,side});sound('flip')}} onDragAction={handleDrag} dealing={dealing}/>{selectedAction&&myTurn&&<div className="placement-hint">빛나는 빈칸에 놓으세요. <button onClick={()=>setSelectedAction(null)}>취소</button></div>}</div>
     </div>}
 
     <AnimatePresence>{coinVisible&&<CoinOverlay winnerId={game.coinWinner} viewerId={playerId} onDone={()=>setCoinVisible(false)}/>} {dealing&&<motion.div className="deal-banner" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}><span>카드 준비 중</span><strong>잠시만 기다려 주세요</strong></motion.div>} {game.phase==='finished'&&<OnlineResult game={game} playerId={playerId} role={role} onReplay={requestReplay} onChooseMap={chooseAnotherMap} onMenu={leave}/>}</AnimatePresence>
-    {!connected&&<div className="disconnect-banner">{connectionState==='closed'?'방이 종료되었습니다.':'연결이 불안정하지만 계속 선택할 수 있습니다. 행동은 연결이 돌아오면 자동 전달됩니다.'}</div>}
+    {!connected&&<div className="disconnect-banner">{connectionState==='closed'?'방이 종료되었습니다.':'연결을 복구하고 있어요. 게임은 유지되며 연결되면 계속할 수 있습니다.'}</div>}
     {syncingAction&&connected&&<div className="sync-banner"><i/><span>상대 기기에 행동을 동기화하는 중…</span></div>}
+    {error&&<div className="online-error" role="alert">{error}</div>}
     {copied&&<div className="copy-toast">초대 문구 · 방 코드 · 링크 복사됨</div>}
   </main></LayoutGroup>
 }

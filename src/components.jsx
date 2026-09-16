@@ -1,12 +1,9 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { PLAYER_META, getActionForCard, getWildAction, inputOwner, legalSlotIds, visibleInputValue } from './game.js'
-import { MAP_BY_ID, wirePath } from './maps.js'
+import { wirePath } from './maps.js'
 import { sound } from './audio.js'
-import './input-board.css'
-import './input-card-motion.css'
-import './experience.css'
-import './game-feel.css'
+import { useDialogFocus } from './useDialogFocus.js'
 
 const CARD_META = {
   AND: { className: 'card-and', hint: '둘 다 1' },
@@ -62,9 +59,12 @@ export function GateCard({ card, compact = false, selected = false, disabled = f
       onDragStart={() => { if (!selected) onSelect?.() }}
       onDragEnd={(event, info) => onDragEnd?.({ clientX: info?.point?.x ?? event?.clientX, clientY: info?.point?.y ?? event?.clientY, nativeEvent: event })}
       initial={dealFromCenter ? { y: -220, x: 0, scale: 0.28, rotate: 11, opacity: 0 } : false}
-      animate={{ y: 0, x: 0, scale: 1, rotate: 0, opacity: 1 }}
+      animate={{ y: selected ? -8 : 0, x: 0, scale: selected ? 1.03 : 1, rotate: 0, opacity: 1 }}
+      whileHover={!compact && !disabled ? { y: -8, scale: 1.03 } : undefined}
+      whileTap={!compact && !disabled ? { scale: .98 } : undefined}
       transition={dealFromCenter ? { type: 'spring', stiffness: 380, damping: 28, delay: dealDelay } : { type: 'spring', stiffness: 500, damping: 35 }}
       aria-label={`${card.type} 카드`}
+      aria-pressed={compact ? undefined : selected}
       title={compact ? undefined : GATE_TRUTH[card.type]}
     >
       <span className="card-corner top">{card.type}</span>
@@ -96,9 +96,11 @@ export function WildCard({ playerId, side = 'NOT', compact = false, selected = f
         onDragStart={() => { if (!selected) onSelect?.() }}
         onDragEnd={(event, info) => onDragEnd?.({ clientX: info?.point?.x ?? event?.clientX, clientY: info?.point?.y ?? event?.clientY, nativeEvent: event })}
         initial={dealFromCenter ? { y: -220, scale: 0.28, rotateY: 90, opacity: 0 } : false}
-        animate={{ y: 0, scale: 1, rotateY: 0, opacity: 1 }}
+        animate={{ y: selected ? -8 : 0, scale: selected ? 1.03 : 1, rotateY: 0, opacity: 1 }}
+        whileHover={!compact && !disabled ? { y: -8, scale: 1.03 } : undefined}
         transition={{ type: 'spring', stiffness: 420, damping: 30, delay: dealFromCenter ? 0.58 : 0 }}
         aria-label={`와일드 ${sideLabel} 카드`}
+        aria-pressed={compact ? undefined : selected}
       >
         <div className="wild-half wild-not" />
         <div className="wild-half wild-empty" />
@@ -146,34 +148,6 @@ function BoardInputCard({ id, value, owner, reveal, activeSignal, layoutId, onCl
       </div>
       {activeSignal !== undefined && <SignalDot value={activeSignal} />}
     </motion.div>
-  )
-}
-
-function InputChoiceCard({ inputId, value, order, onSelect, onDragStart, onDragEnd }) {
-  return (
-    <motion.button
-      type="button"
-      layoutId={inputCardLayoutId(inputId, value)}
-      className="input-choice-card"
-      data-input-id={inputId}
-      onClick={onSelect}
-      drag
-      dragSnapToOrigin
-      dragElastic={0.08}
-      dragMomentum={false}
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      initial={{ x: -118, y: 28, scale: 0.34, opacity: 0, rotate: value === 0 ? -13 : 13 }}
-      animate={{ x: 0, y: 0, scale: 1, opacity: 1, rotate: value === 0 ? -2.5 : 2.5 }}
-      whileHover={{ y: -8, scale: 1.055, rotate: 0 }}
-      whileTap={{ scale: 0.96 }}
-      whileDrag={{ scale: 1.08, rotate: 0, zIndex: 100, cursor: 'grabbing' }}
-      transition={{ type: 'spring', stiffness: 420, damping: 30, delay: .11 + order * 0.085, layout: { type: 'spring', stiffness: 520, damping: 34 } }}
-      aria-label={`${inputId} 입력 ${value} 카드 놓기`}
-    >
-      <strong>{value}</strong>
-      <small>{inputId}에 놓기</small>
-    </motion.button>
   )
 }
 
@@ -234,7 +208,7 @@ export function GameBoard({ map, game, viewerId, selectedAction, onSlotClick, re
             return <g key={edge.join('-')} data-from={from} data-to={to} className={`wire-group ${related ? 'is-related' : ''} ${active ? 'active' : ''}`}>
               <path d={path} className="board-wire-outline" />
               <path d={path} className="board-wire-base" />
-              {active && value !== undefined && <motion.path key={`${from}-${to}-${revealIndex}`} d={path} className={`board-wire-signal signal-path-${value}`} initial={{ pathLength: 0, opacity: 0.25 }} animate={{ pathLength: 1, opacity: 1 }} transition={{ duration: 0.42, ease: 'easeInOut' }} />}
+              {active && value !== undefined && <motion.path key={`${from}-${to}`} d={path} className={`board-wire-signal signal-path-${value}`} initial={{ pathLength: 0, opacity: 0.25 }} animate={{ pathLength: 1, opacity: 1 }} transition={{ duration: 0.42, ease: 'easeInOut' }} />}
             </g>
           })}
         </svg>
@@ -246,9 +220,9 @@ export function GameBoard({ map, game, viewerId, selectedAction, onSlotClick, re
           const signalVisible = nodeRevealed(node.id, node.type)
           const signal = signalVisible ? solution?.signals?.[node.id] : undefined
           const focusProps = {
-            onPointerEnter: () => setFocusedNode(node.id),
+            onPointerEnter: (event) => { if (event.pointerType !== 'touch') setFocusedNode(node.id) },
             onPointerLeave: () => setFocusedNode(null),
-            onFocus: () => setFocusedNode(node.id),
+            onFocus: (event) => { if(event.currentTarget.matches(':focus-visible'))setFocusedNode(node.id) },
             onBlur: () => setFocusedNode(null),
           }
 
@@ -282,7 +256,7 @@ export function GameBoard({ map, game, viewerId, selectedAction, onSlotClick, re
           const isCurrentStage = true
           const pairedPreview = !placement && selectedAction?.kind === 'wild' && focusedNode && focusedNode !== node.id && legalSlots.includes(focusedNode) && legal
           const previewType = pairedPreview ? (selectedAction.side === 'NOT' ? '통과' : 'NOT') : null
-          return <button key={node.id} type="button" data-slot-id={node.id} data-node-id={node.id} data-stage={node.stage ?? 1} className={`board-node card-slot ${node.type === 'wild' ? 'wild-slot' : ''} ${legal ? 'legal' : ''} ${placement ? 'filled' : ''} ${isCurrentStage ? 'current-stage-slot' : 'future-stage-slot'} ${focusedNode === node.id ? 'is-focused' : ''} ${signalVisible ? 'signal-resolved' : ''}`} style={style} onClick={() => legal && onSlotClick(node.id)} aria-label={`${node.id} ${node.type === 'wild' ? 'NOT 또는 통과 자리' : '게이트 자리'}${placement ? ` · ${placement.cardType === 'EMPTY' ? '통과' : placement.cardType}` : legal ? ' · 놓기 가능' : ''}`} aria-disabled={!legal} {...focusProps}>
+          return <button key={node.id} type="button" data-slot-id={node.id} data-node-id={node.id} data-stage={node.stage ?? 1} className={`board-node card-slot ${node.type === 'wild' ? 'wild-slot' : ''} ${legal ? 'legal' : ''} ${placement ? 'filled' : ''} ${placement?.turn === game.turnNumber - 1 ? 'just-placed' : ''} ${isCurrentStage ? 'current-stage-slot' : 'future-stage-slot'} ${focusedNode === node.id ? 'is-focused' : ''} ${signalVisible ? 'signal-resolved' : ''}`} style={style} onClick={() => legal && onSlotClick(node.id)} aria-label={`${node.id} ${node.type === 'wild' ? 'NOT 또는 통과 자리' : '게이트 자리'}${placement ? ` · ${placement.cardType === 'EMPTY' ? '통과' : placement.cardType}` : legal ? ' · 놓기 가능' : ''}`} aria-disabled={!legal} {...focusProps}>
             {!placement ? <>
               <div className="slot-print" aria-hidden="true" />
               <span className="slot-kind">{previewType ? `자동 ${previewType}` : node.type === 'wild' ? 'NOT / 통과' : '게이트'}</span>
@@ -335,97 +309,23 @@ export function TurnCurtain({ playerId, onReady }) {
 }
 
 export function CoinOverlay({ winnerId, viewerId = null, onDone }) {
+  const dialogRef = useDialogFocus()
+  const done = useRef(onDone)
+  done.current = onDone
+  useEffect(() => { const timer = setTimeout(() => done.current(), 2000); return () => clearTimeout(timer) }, [])
   const firstPlayerId = 1 - winnerId
   const name = (id) => viewerId === null ? `플레이어 ${id + 1}` : (id === viewerId ? '당신' : '상대')
-  return <motion.div className="coin-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className={`coin player-${winnerId + 1}`} initial={{ rotateY: 0, y: -80, scale: 0.5 }} animate={{ rotateY: 1080, y: 0, scale: 1 }} transition={{ duration: 1.05, ease: [0.2, 0.7, 0.2, 1] }}>{viewerId === null ? winnerId + 1 : (winnerId === viewerId ? '나' : '상대')}</motion.div><motion.div className="coin-copy" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.72 }}><span>순서 정하기</span><strong>{name(winnerId)}이 목표를 고릅니다.</strong><small>{name(firstPlayerId)}이 먼저 카드를 놓습니다.</small><button type="button" onClick={onDone}>확인</button></motion.div></motion.div>
+  return <motion.div ref={dialogRef} className="coin-overlay" role="dialog" aria-modal="true" aria-label="순서 정하기" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className={`coin player-${winnerId + 1}`} initial={{ rotateY: 0, y: -80, scale: 0.5 }} animate={{ rotateY: 1080, y: 0, scale: 1 }} transition={{ duration: 1.05, ease: [0.2, 0.7, 0.2, 1] }}>{viewerId === null ? winnerId + 1 : (winnerId === viewerId ? '나' : '상대')}</motion.div><motion.div className="coin-copy" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.72 }}><span>순서 정하기</span><strong>{name(winnerId)}이 목표를 고릅니다.</strong><small>{name(firstPlayerId)}이 먼저 카드를 놓습니다.</small><button type="button" onClick={onDone}>바로 계속하기</button></motion.div></motion.div>
 }
 
 export function TargetChoice({ playerId, personal = false, onChoose }) {
   return <motion.div className="phase-panel" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}><span className="eyebrow">목표 선택</span><h2>{personal ? '원하는 결과를 고르세요.' : `플레이어 ${playerId + 1}, 원하는 결과를 고르세요.`}</h2><div className="target-choice-grid">{[0, 1].map((value) => <button key={value} className={`target-choice value-${value}`} onClick={() => onChoose(value)}><span>내 목표</span><strong>{value}</strong></button>)}</div></motion.div>
 }
 
-export function InputChoice({ game, playerId, personal = false, draft, onChange, onSubmit }) {
-  const [selected, setSelected] = useState(null)
-  const assigned = game.players[playerId].assignedInputs
-  const opponentAssigned = game.players[1 - playerId].assignedInputs
-  const complete = assigned.every((id) => draft[id] !== undefined)
-  const map = MAP_BY_ID[game.mapId]
-
-  useEffect(() => {
-    const timers = []
-    assigned.forEach((id, pairIndex) => {
-      ;[0, 1].forEach((value) => {
-        timers.push(window.setTimeout(() => sound('deal'), 120 + (pairIndex * 2 + value) * 90))
-      })
-    })
-    return () => timers.forEach((timer) => window.clearTimeout(timer))
-  }, [game.seed, playerId])
-
-  function placeSelected(id) {
-    if (selected?.id === id) {
-      onChange(id, selected.value)
-      setSelected(null)
-    } else if (draft[id] !== undefined) {
-      onChange(id, undefined)
-      setSelected(null)
-    }
-  }
-
-  function dropInputCard(inputId, value, event, info) {
-    const x = info?.point?.x ?? event?.clientX
-    const y = info?.point?.y ?? event?.clientY
-    if (x === undefined || y === undefined) return
-    const target = document.elementsFromPoint(x, y).find((element) => element?.dataset?.inputDropId === inputId)
-    if (target) {
-      onChange(inputId, value)
-      setSelected(null)
-      sound('place')
-    }
-  }
-
-  return <motion.div className={`phase-panel input-phase input-board-phase player-panel-${playerId + 1}`} initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}>
-    <div className="input-board-heading">
-      <div><span className="eyebrow">비밀 입력</span><h2>{personal ? '0·1 카드를 내 자리에 놓으세요.' : `플레이어 ${playerId + 1}, 입력 카드를 보드에 놓으세요.`}</h2></div>
-      <div className="input-privacy-copy"><strong>내 위치 · {assigned.join(' · ')}</strong><span>상대 위치 · {opponentAssigned.join(' · ')}</span><small>위치는 서로 보이지만, 놓은 카드의 0/1 값은 상대에게 공개되지 않습니다.</small></div>
-    </div>
-    <div className="input-board-live">
-      <GameBoard map={map} game={game} viewerId={playerId} selectedAction={null} onSlotClick={() => {}} inputSelection={{ playerId, draft, selected, onPlace: placeSelected }} />
-    </div>
-    <div className="input-deal-zone">
-      <motion.div className="input-setup-deck" initial={{ opacity: 0, scale: .88 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: .04 }}><DeckStack count={assigned.length * 2} dealing /><small>입력 카드</small></motion.div>
-      <div className="input-card-rack" aria-label="비밀 입력 카드">
-        {assigned.map((id, pairIndex) => {
-          const placedValue = draft[id]
-          return <div className="input-card-pair" key={id}>
-            <div className="input-card-pair-label"><b>{id}</b><span>{placedValue === undefined ? '내 자리' : `${placedValue} 놓음`}</span></div>
-            <div className="input-card-pair-cards">
-              {[0, 1].map((value) => <div className={`input-choice-card-slot ${selected?.id === id && selected.value === value ? 'is-selected' : ''}`} key={value}>
-                {placedValue === value
-                  ? <div className="input-choice-card-placeholder" aria-hidden="true" />
-                  : <InputChoiceCard
-                      inputId={id}
-                      value={value}
-                      order={pairIndex * 2 + value}
-                      onSelect={() => setSelected(current => current?.id === id && current.value === value ? null : { id, value })}
-                      onDragStart={() => setSelected({ id, value })}
-                      onDragEnd={(event, info) => dropInputCard(id, value, event, info)}
-                    />}
-              </div>)}
-            </div>
-          </div>
-        })}
-      </div>
-    </div>
-    <div className="input-board-footer">
-      <span>{selected ? `${selected.value} 카드 선택 · ${selected.id} 자리로 드래그하거나 자리를 누르세요.` : complete ? '모두 놓았습니다. 내 입력 카드를 누르면 다시 가져올 수 있습니다.' : '0/1 카드를 드래그하거나 눌러 내 자리에 놓으세요.'}</span>
-      <motion.button className="primary-button" type="button" disabled={!complete || Boolean(selected)} onClick={onSubmit} animate={complete ? { scale: [1, 1.025, 1] } : { scale: 1 }} transition={{ duration: .34 }}>입력 확정</motion.button>
-    </div>
-  </motion.div>
-}
-
-export function ResultOverlay({ game, onReplay, onMenu, onNewSeed }) {
+export function ResultOverlay({ game, onMenu, onNewSeed }) {
   const [inspect, setInspect] = useState(false)
+  const dialogRef = useDialogFocus(!inspect)
   const won = (game.result?.winner ?? 0) === 0
   if (inspect) return <button className="show-result-button" onClick={() => setInspect(false)}>결과 다시 보기</button>
-  return <motion.div className="result-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }}><motion.div className={`result-card player-${won ? 1 : 2}`} initial={{ y: 45, scale: 0.9 }} animate={{ y: 0, scale: 1 }} transition={{ type: 'spring', stiffness: 230, damping: 22 }}><div className="result-output"><span>결과</span><strong>{game.result?.output}</strong></div><h2>{won ? '승리했습니다!' : '상대가 이겼습니다'}</h2><div className="result-actions"><button onClick={() => setInspect(true)}>보드 살펴보기</button><button onClick={onReplay}>같은 판 다시</button><button onClick={onNewSeed}>새 판</button><button onClick={onMenu}>맵 선택</button></div></motion.div></motion.div>
+  return <motion.div ref={dialogRef} className="result-overlay" role="dialog" aria-modal="true" aria-label="게임 결과" initial={{ opacity: 0 }} animate={{ opacity: 1 }}><motion.div className={`result-card player-${won ? 1 : 2}`} initial={{ y: 45, scale: 0.9 }} animate={{ y: 0, scale: 1 }} transition={{ type: 'spring', stiffness: 230, damping: 22 }}><div className="result-output"><span>결과</span><strong>{game.result?.output}</strong></div><h2>{won ? '승리했습니다!' : '상대가 이겼습니다'}</h2><div className="result-actions"><button onClick={() => setInspect(true)}>보드 살펴보기</button><button className="primary-button" onClick={onNewSeed}>다시 하기</button><button onClick={onMenu}>맵 선택</button></div></motion.div></motion.div>
 }
