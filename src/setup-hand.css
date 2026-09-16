@@ -1,0 +1,90 @@
+.setup-hand,
+.setup-opponent-hand {
+  min-height: 132px;
+}
+
+.setup-hand-stage {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  width: 100%;
+}
+
+.setup-mini-deck {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  pointer-events: none;
+}
+.setup-mini-deck .deck-stack { transform: scale(.72); transform-origin: center; }
+.setup-mini-deck > span { margin-top: -9px; font: 700 8px/1 'IBM Plex Mono'; letter-spacing: .12em; opacity: .56; }
+
+.setup-pairs {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 12px;
+  min-width: 0;
+}
+.setup-pair { display: grid; gap: 5px; justify-items: center; }
+.setup-pair > b { font: 800 10px/1 'IBM Plex Mono'; opacity: .72; }
+.setup-pair-cards { display: flex; gap: 5px; }
+.setup-card-slot { width: 68px; min-height: 94px; display: grid; place-items: end center; }
+.setup-value-card { width: 66px; min-width: 66px; height: 92px; }
+.setup-value-card > strong { font-size: 36px; }
+.setup-value-card > small { font: 800 9px/1 'IBM Plex Mono'; opacity: .58; }
+.setup-value-card.setup-selected { box-shadow: 0 0 0 3px rgba(255,255,255,.86), 0 0 0 6px rgba(255,211,66,.48), 0 20px 34px rgba(0,0,0,.35); }
+.setup-card-placeholder {
+  width: 66px;
+  height: 92px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 5px;
+  border: 1px dashed rgba(255,255,255,.16);
+  border-radius: 11px;
+  color: rgba(255,255,255,.4);
+}
+.setup-card-placeholder span { font: 800 25px/1 'IBM Plex Mono'; }
+.setup-card-placeholder small { font-size: 8px; }
+
+.setup-confirm {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+  min-width: 178px;
+}
+.setup-confirm > span { max-width: 220px; text-align: right; color: var(--muted); font-size: 10px; line-height: 1.35; }
+.setup-confirm .primary-button { min-width: 112px; }
+
+.table-layout.setup-table .board-frame {
+  animation: none;
+}
+.table-layout.setup-table .board-zone,
+.table-layout:not(.setup-table) .board-zone {
+  transition: width .25s ease, max-width .25s ease;
+}
+.table-layout.setup-table .opponent-area,
+.table-layout.setup-table .current-area {
+  min-height: 132px;
+}
+.table-layout.setup-table .board-canvas {
+  transition: filter .25s ease;
+}
+
+@media (max-width: 820px) {
+  .setup-hand-stage { grid-template-columns: 52px minmax(0, 1fr); gap: 8px; }
+  .setup-confirm { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; width: 100%; min-width: 0; }
+  .setup-confirm > span { text-align: left; }
+  .setup-pairs { justify-content: flex-start; overflow-x: auto; padding-bottom: 2px; }
+  .setup-card-slot { width: 60px; min-height: 84px; }
+  .setup-value-card, .setup-card-placeholder { width: 58px; min-width: 58px; height: 80px; }
+  .setup-value-card > strong { font-size: 30px; }
+  .setup-mini-deck .deck-stack { transform: scale(.56); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .table-layout.setup-table .board-zone,
+  .table-layout:not(.setup-table) .board-zone { transition: none; }
+}
