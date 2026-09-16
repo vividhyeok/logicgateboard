@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { motion } from 'framer-motion'
 import { PLAYER_META, currentStage, getActionForCard, getWildAction, inputOwner, legalSlotIds, visibleInputValue } from './game.js'
 import { MAP_BY_ID, wirePath } from './maps.js'
+import './input-board.css'
 
 const CARD_META = {
   AND: { className: 'card-and', hint: '둘 다 1' },
@@ -154,7 +155,7 @@ export function MapPreview({ map }) {
   </svg>
 }
 
-export function GameBoard({ map, game, viewerId, selectedAction, onSlotClick, revealAllInputs = false, solution = null, revealIndex = -1, resolving = false }) {
+export function GameBoard({ map, game, viewerId, selectedAction, onSlotClick, revealAllInputs = false, solution = null, revealIndex = -1, resolving = false, inputSelection = null }) {
   const [focusedNode, setFocusedNode] = useState(null)
   const legalSlots = selectedAction ? legalSlotIds(game, selectedAction) : []
   const activeStage = currentStage(game)
@@ -168,7 +169,7 @@ export function GameBoard({ map, game, viewerId, selectedAction, onSlotClick, re
 
   return (
     <motion.section className="board-frame" initial={{ opacity: 0, scale: 0.94, rotateX: 9 }} animate={{ opacity: 1, scale: 1, rotateX: 0 }} transition={{ type: 'spring', stiffness: 170, damping: 22 }}>
-      <div className={`board-canvas ${focusedNode ? 'has-node-focus' : ''} ${resolving ? 'is-resolving' : ''}`} data-resolving={resolving ? 'true' : 'false'}>
+      <div className={`board-canvas ${focusedNode ? 'has-node-focus' : ''} ${resolving ? 'is-resolving' : ''} ${inputSelection ? 'is-input-selecting' : ''}`} data-resolving={resolving ? 'true' : 'false'}>
         <svg className="board-wires" viewBox="0 0 1000 520" preserveAspectRatio="none" aria-hidden="true">
           <defs><filter id="wireGlow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
           {map.edges.map((edge) => {
@@ -201,8 +202,15 @@ export function GameBoard({ map, game, viewerId, selectedAction, onSlotClick, re
 
           if (node.type === 'input') {
             const ownedValue = owner === viewerId ? game.players[owner]?.inputValues?.[node.id] : undefined
-            return <div key={node.id} data-node-id={node.id} className={`board-node input-node ${focusedNode === node.id ? 'is-focused' : ''}`} style={style} {...focusProps}>
-              <BoardInputCard id={node.id} value={inputValue ?? ownedValue} owner={owner} reveal={inputValue !== null || revealAllInputs} activeSignal={signal} />
+            const canChooseHere = Boolean(inputSelection && owner === inputSelection.playerId && owner === viewerId)
+            const draftValue = canChooseHere ? inputSelection.draft?.[node.id] : undefined
+            const shownValue = canChooseHere ? draftValue : (inputValue ?? ownedValue)
+            const revealValue = canChooseHere ? draftValue !== undefined : (inputValue !== null || revealAllInputs)
+            return <div key={node.id} data-node-id={node.id} className={`board-node input-node ${canChooseHere ? 'input-node-selectable' : ''} ${draftValue !== undefined ? 'input-node-chosen' : ''} ${focusedNode === node.id ? 'is-focused' : ''}`} style={style} {...focusProps}>
+              <BoardInputCard id={node.id} value={shownValue} owner={owner} reveal={revealValue} activeSignal={signal} />
+              {canChooseHere && <div className="board-input-picker" role="group" aria-label={`${node.id} 비밀 입력 선택`}>
+                {[0, 1].map((value) => <button key={value} type="button" className={draftValue === value ? 'active' : ''} onClick={(event) => { event.stopPropagation(); inputSelection.onChange?.(node.id, value) }} aria-pressed={draftValue === value}>{value}</button>)}
+              </div>}
             </div>
           }
 
@@ -288,19 +296,18 @@ export function InputChoice({ game, playerId, personal = false, draft, onChange,
   const opponentAssigned = game.players[1 - playerId].assignedInputs
   const complete = assigned.every((id) => draft[id] !== undefined)
   const map = MAP_BY_ID[game.mapId]
-  return <motion.div className={`phase-panel input-phase player-panel-${playerId + 1}`} initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}>
-    <span className="eyebrow">비밀 입력</span>
-    <h2>{personal ? '내 입력을 정하세요.' : `플레이어 ${playerId + 1}의 입력을 정하세요.`}</h2>
-    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:14,alignItems:'center',margin:'10px 0 14px'}}>
-      <div style={{minHeight:120,border:'1px solid rgba(30,28,25,.15)',borderRadius:12,padding:8,background:'rgba(255,255,255,.45)'}}><MapPreview map={map} /></div>
-      <div style={{display:'grid',gap:7,fontSize:12,textAlign:'left'}}>
-        <strong>내 입력 위치 · {assigned.join(' · ')}</strong>
-        <span>상대 입력 위치 · {opponentAssigned.join(' · ')}</span>
-        <span style={{opacity:.72}}>위치는 공개됩니다. 0/1 값만 서로 비밀입니다.</span>
-      </div>
+  return <motion.div className={`phase-panel input-phase input-board-phase player-panel-${playerId + 1}`} initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}>
+    <div className="input-board-heading">
+      <div><span className="eyebrow">비밀 입력</span><h2>{personal ? '보드에서 내 입력 카드를 놓으세요.' : `플레이어 ${playerId + 1}, 보드에서 입력 카드를 놓으세요.`}</h2></div>
+      <div className="input-privacy-copy"><strong>내 위치 · {assigned.join(' · ')}</strong><span>상대 위치 · {opponentAssigned.join(' · ')}</span><small>위치는 서로 보이지만, 선택한 0/1 값은 상대에게 공개되지 않습니다.</small></div>
     </div>
-    <div className="input-choice-grid">{assigned.map((id) => <div key={id} className="input-choice-row"><strong>{id}</strong><div>{[0, 1].map((value) => <button key={value} className={draft[id] === value ? 'active' : ''} onClick={() => onChange(id, value)}>{value}</button>)}</div></div>)}</div>
-    <button className="primary-button" type="button" disabled={!complete} onClick={onSubmit}>확정</button>
+    <div className="input-board-live">
+      <GameBoard map={map} game={game} viewerId={playerId} selectedAction={null} onSlotClick={() => {}} inputSelection={{ playerId, draft, onChange }} />
+    </div>
+    <div className="input-board-footer">
+      <span>{complete ? '입력 카드가 모두 놓였습니다. 확정하면 상대 화면에는 ?로만 보입니다.' : '내 입력 위치 옆의 0 또는 1을 눌러 카드를 놓으세요.'}</span>
+      <button className="primary-button" type="button" disabled={!complete} onClick={onSubmit}>입력 확정</button>
+    </div>
   </motion.div>
 }
 
