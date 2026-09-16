@@ -10,6 +10,7 @@ import './gate-symbols.css'
 import './game.css'
 import './board-clarity.css'
 import './launcher.css'
+import './experience.css'
 
 const params = new URLSearchParams(window.location.search)
 const onlineMode = params.get('online') === '1' || params.has('room') || params.has('host')
@@ -34,3 +35,4 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     </GameErrorBoundary>
   </React.StrictMode>,
 )
+

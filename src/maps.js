@@ -82,6 +82,18 @@ export const MAPS = [
   },
 ]
 
+// The paired switch is upstream of a playable gate, never a final XOR flip.
+// No node has a placement-order restriction; stage remains layout metadata only.
+for (const map of MAPS) {
+  map.version = 'free-placement-v2'
+  if (map.level !== 1) continue
+  const positions = { A: [65, 115], B: [65, 405], G1: [265, 135], G2: [265, 365], W1: [460, 135], W2: [460, 365], G3: [675, 250], OUT: [920, 260] }
+  map.nodes.forEach(node => { [node.x, node.y] = positions[node.id] })
+  const reused = map.id === 'level1_map2' ? 'B' : map.id === 'level1_map3' ? 'G2' : 'A'
+  map.edges = [['A','G1'],['B','G1'],['A','G2'],['B','G2'],['G1','W1'],['G2','W2'],['W1','G3'],['W2','G3'],['G3','OUT'],[reused,'OUT']]
+  map.description = '빈칸은 처음부터 자유롭게 선택합니다. 한쪽을 뒤집으면 다른 쪽은 통과합니다.'
+}
+
 export const MAP_BY_ID = Object.fromEntries(MAPS.map((map) => [map.id, map]))
 export function incomingEdges(map, nodeId) { return map.edges.filter(([, to]) => to === nodeId) }
 
@@ -289,3 +301,4 @@ export function wirePath(map, edge) {
   const route = buildWireRoutes(map).get(`${edge[0]}>${edge[1]}`)
   return routeToPath(route)
 }
+
