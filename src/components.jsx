@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { PLAYER_META, currentStage, getActionForCard, getWildAction, inputOwner, legalSlotIds, visibleInputValue } from './game.js'
 import { MAP_BY_ID, wirePath } from './maps.js'
 import './input-board.css'
+import './input-card-motion.css'
 
 const CARD_META = {
   AND: { className: 'card-and', hint: '둘 다 1' },
@@ -112,16 +113,53 @@ function SignalDot({ value }) {
   return <motion.span className={`signal-dot signal-${value}`} initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring', stiffness: 460, damping: 24 }}>{value}</motion.span>
 }
 
-function BoardInputCard({ id, value, owner, reveal, activeSignal }) {
+function inputCardLayoutId(id, value) {
+  return value === undefined ? undefined : `input-card-${id}-${value}`
+}
+
+function BoardInputCard({ id, value, owner, reveal, activeSignal, layoutId, onClick }) {
   const shown = reveal ? value : null
+  const interactive = Boolean(onClick)
   return (
-    <motion.div className={`board-value-card input-value-card owner-${owner + 1}`} animate={{ rotateY: shown === null ? 180 : 0 }} transition={{ duration: 0.3 }} aria-label={`입력 ${id}`}>
+    <motion.div
+      layoutId={layoutId}
+      layout={Boolean(layoutId)}
+      className={`board-value-card input-value-card owner-${owner + 1} ${interactive ? 'input-card-interactive' : ''}`}
+      animate={{ rotateY: shown === null ? 180 : 0 }}
+      transition={layoutId ? { layout: { type: 'spring', stiffness: 520, damping: 34 }, rotateY: { duration: 0.22 } } : { duration: 0.3 }}
+      aria-label={`입력 ${id}${shown !== null ? ` 값 ${shown}` : ''}`}
+      role={interactive ? 'button' : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onClick={interactive ? onClick : undefined}
+      onKeyDown={interactive ? (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onClick?.() } } : undefined}
+    >
       <div className="value-card-inner">
         <div className="value-card-front"><span>{id}</span><strong>{shown ?? '?'}</strong></div>
         <div className="value-card-back"><span>{id}</span><strong>?</strong></div>
       </div>
       {activeSignal !== undefined && <SignalDot value={activeSignal} />}
     </motion.div>
+  )
+}
+
+function InputChoiceCard({ inputId, value, order, onSelect }) {
+  return (
+    <motion.button
+      type="button"
+      layoutId={inputCardLayoutId(inputId, value)}
+      className="input-choice-card"
+      data-input-id={inputId}
+      onClick={onSelect}
+      initial={{ y: 72, scale: 0.62, opacity: 0, rotate: value === 0 ? -7 : 7 }}
+      animate={{ y: 0, scale: 1, opacity: 1, rotate: value === 0 ? -2.5 : 2.5 }}
+      whileHover={{ y: -8, scale: 1.055, rotate: 0 }}
+      whileTap={{ scale: 0.96 }}
+      transition={{ type: 'spring', stiffness: 420, damping: 30, delay: order * 0.065, layout: { type: 'spring', stiffness: 520, damping: 34 } }}
+      aria-label={`${inputId} 입력 ${value} 카드 놓기`}
+    >
+      <strong>{value}</strong>
+      <small>INPUT</small>
+    </motion.button>
   )
 }
 
@@ -207,10 +245,15 @@ export function GameBoard({ map, game, viewerId, selectedAction, onSlotClick, re
             const shownValue = canChooseHere ? draftValue : (inputValue ?? ownedValue)
             const revealValue = canChooseHere ? draftValue !== undefined : (inputValue !== null || revealAllInputs)
             return <div key={node.id} data-node-id={node.id} className={`board-node input-node ${canChooseHere ? 'input-node-selectable' : ''} ${draftValue !== undefined ? 'input-node-chosen' : ''} ${focusedNode === node.id ? 'is-focused' : ''}`} style={style} {...focusProps}>
-              <BoardInputCard id={node.id} value={shownValue} owner={owner} reveal={revealValue} activeSignal={signal} />
-              {canChooseHere && <div className="board-input-picker" role="group" aria-label={`${node.id} 비밀 입력 선택`}>
-                {[0, 1].map((value) => <button key={value} type="button" className={draftValue === value ? 'active' : ''} onClick={(event) => { event.stopPropagation(); inputSelection.onChange?.(node.id, value) }} aria-pressed={draftValue === value}>{value}</button>)}
-              </div>}
+              <BoardInputCard
+                id={node.id}
+                value={shownValue}
+                owner={owner}
+                reveal={revealValue}
+                activeSignal={signal}
+                layoutId={canChooseHere && draftValue !== undefined ? inputCardLayoutId(node.id, draftValue) : undefined}
+                onClick={canChooseHere && draftValue !== undefined ? () => inputSelection.onChange?.(node.id, undefined) : undefined}
+              />
             </div>
           }
 
@@ -298,15 +341,30 @@ export function InputChoice({ game, playerId, personal = false, draft, onChange,
   const map = MAP_BY_ID[game.mapId]
   return <motion.div className={`phase-panel input-phase input-board-phase player-panel-${playerId + 1}`} initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}>
     <div className="input-board-heading">
-      <div><span className="eyebrow">비밀 입력</span><h2>{personal ? '보드에서 내 입력 카드를 놓으세요.' : `플레이어 ${playerId + 1}, 보드에서 입력 카드를 놓으세요.`}</h2></div>
-      <div className="input-privacy-copy"><strong>내 위치 · {assigned.join(' · ')}</strong><span>상대 위치 · {opponentAssigned.join(' · ')}</span><small>위치는 서로 보이지만, 선택한 0/1 값은 상대에게 공개되지 않습니다.</small></div>
+      <div><span className="eyebrow">비밀 입력</span><h2>{personal ? '입력 카드를 보드에 놓으세요.' : `플레이어 ${playerId + 1}, 입력 카드를 보드에 놓으세요.`}</h2></div>
+      <div className="input-privacy-copy"><strong>내 위치 · {assigned.join(' · ')}</strong><span>상대 위치 · {opponentAssigned.join(' · ')}</span><small>위치는 서로 보이지만, 놓은 카드의 0/1 값은 상대에게 공개되지 않습니다.</small></div>
     </div>
     <div className="input-board-live">
       <GameBoard map={map} game={game} viewerId={playerId} selectedAction={null} onSlotClick={() => {}} inputSelection={{ playerId, draft, onChange }} />
     </div>
+    <div className="input-card-rack" aria-label="비밀 입력 카드">
+      {assigned.map((id, pairIndex) => {
+        const selected = draft[id]
+        return <div className="input-card-pair" key={id}>
+          <div className="input-card-pair-label"><b>{id}</b><span>{selected === undefined ? '카드 선택' : `${selected} 놓음`}</span></div>
+          <div className="input-card-pair-cards">
+            {[0, 1].map((value) => <div className="input-choice-card-slot" key={value}>
+              {selected === value
+                ? <div className="input-choice-card-placeholder" aria-hidden="true" />
+                : <InputChoiceCard inputId={id} value={value} order={pairIndex * 2 + value} onSelect={() => onChange(id, value)} />}
+            </div>)}
+          </div>
+        </div>
+      })}
+    </div>
     <div className="input-board-footer">
-      <span>{complete ? '입력 카드가 모두 놓였습니다. 확정하면 상대 화면에는 ?로만 보입니다.' : '내 입력 위치 옆의 0 또는 1을 눌러 카드를 놓으세요.'}</span>
-      <button className="primary-button" type="button" disabled={!complete} onClick={onSubmit}>입력 확정</button>
+      <span>{complete ? '모두 놓았습니다. 보드의 내 입력 카드를 누르면 다시 손으로 가져올 수 있습니다.' : '아래 0/1 카드를 골라 실제 입력 위치에 놓으세요.'}</span>
+      <motion.button className="primary-button" type="button" disabled={!complete} onClick={onSubmit} animate={complete ? { scale: [1, 1.025, 1] } : { scale: 1 }} transition={{ duration: .34 }}>입력 확정</motion.button>
     </div>
   </motion.div>
 }
