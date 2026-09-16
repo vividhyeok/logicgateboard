@@ -1,9 +1,10 @@
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
-import { PLAYER_META, currentStage, getActionForCard, getWildAction, inputOwner, legalSlotIds, visibleInputValue } from './game.js'
+import { PLAYER_META, getActionForCard, getWildAction, inputOwner, legalSlotIds, visibleInputValue } from './game.js'
 import { MAP_BY_ID, wirePath } from './maps.js'
 import './input-board.css'
 import './input-card-motion.css'
+import './experience.css'
 
 const CARD_META = {
   AND: { className: 'card-and', hint: '둘 다 1' },
@@ -42,9 +43,10 @@ export function CardBack({ small = false }) {
 
 export function GateCard({ card, compact = false, selected = false, disabled = false, owner = null, onSelect, onDragEnd, dealFromCenter = false, dealDelay = 0, layoutId }) {
   const meta = CARD_META[card.type] || CARD_META.AND
+  const CardTag = compact ? motion.div : motion.button
   const dragEnabled = !compact && !disabled && Boolean(onDragEnd)
   return (
-    <motion.button
+    <CardTag
       type="button"
       layoutId={layoutId || `card-${card.id}`}
       className={`logic-card ${meta.className} ${compact ? 'compact' : ''} ${selected ? 'selected' : ''}`}
@@ -67,16 +69,17 @@ export function GateCard({ card, compact = false, selected = false, disabled = f
       <div className="card-core"><GateIcon type={card.type} /><strong>{card.type}</strong>{!compact && <small>{meta.hint}</small>}</div>
       <span className="card-corner bottom">{card.type}</span>
       {owner !== null && owner >= 0 && <span className={`card-owner player-${owner + 1}`}>{owner + 1}</span>}
-    </motion.button>
+    </CardTag>
   )
 }
 
 export function WildCard({ playerId, side = 'NOT', compact = false, selected = false, disabled = false, onSelect, onFlip, onDragEnd, dealFromCenter = false, layoutId }) {
+  const CardTag = compact ? motion.div : motion.button
   const dragEnabled = !compact && !disabled && Boolean(onDragEnd)
   const sideLabel = side === 'NOT' ? 'NOT' : '통과'
   return (
     <div className={`wild-wrap ${compact ? 'compact-wrap' : ''}`}>
-      <motion.button
+      <CardTag
         type="button"
         layoutId={layoutId || `wild-p${playerId}`}
         className={`logic-card wild-card ${compact ? 'compact' : ''} ${selected ? 'selected' : ''}`}
@@ -95,15 +98,15 @@ export function WildCard({ playerId, side = 'NOT', compact = false, selected = f
       >
         <div className="wild-half wild-not" />
         <div className="wild-half wild-empty" />
-        <span className="card-corner top">WILD</span>
+        <span className="card-corner top">NOT / 통과</span>
         <div className="card-core wild-core">
           <motion.div key={side} initial={{ rotateY: 88, opacity: 0.25 }} animate={{ rotateY: 0, opacity: 1 }} transition={{ duration: 0.24 }} className="wild-face">
             <strong>{sideLabel}</strong>{!compact && <small>{side === 'NOT' ? '이 경로 반전' : '반대 경로가 NOT'}</small>}
           </motion.div>
         </div>
-        <span className="card-corner bottom">WILD</span>
+        <span className="card-corner bottom">NOT / 통과</span>
         {playerId >= 0 && <span className={`card-owner player-${playerId + 1}`}>{playerId + 1}</span>}
-      </motion.button>
+      </CardTag>
       {!compact && !disabled && <button type="button" className="wild-flip-button" onClick={(event) => { event.stopPropagation(); onFlip?.() }}>↻ {side === 'NOT' ? '통과 쪽' : 'NOT 쪽'}</button>}
     </div>
   )
@@ -158,7 +161,7 @@ function InputChoiceCard({ inputId, value, order, onSelect }) {
       aria-label={`${inputId} 입력 ${value} 카드 놓기`}
     >
       <strong>{value}</strong>
-      <small>INPUT</small>
+      <small>{inputId}에 놓기</small>
     </motion.button>
   )
 }
@@ -167,8 +170,8 @@ function OutputCard({ value, revealed, activeSignal, gateType }) {
   return (
     <motion.div className="board-value-card output-value-card" animate={{ rotateY: revealed ? 0 : 180 }} transition={{ duration: 0.36 }} aria-label={`최종 결과${gateType ? ` · 고정 ${gateType}` : ''}`}>
       <div className="value-card-inner">
-        <div className="value-card-front"><span style={{fontSize:7,fontWeight:800}}>{gateType ? `고정 ${gateType}` : 'OUT'}</span><strong>{revealed ? value : '?'}</strong></div>
-        <div className="value-card-back"><span style={{fontSize:7,fontWeight:800}}>{gateType ? `고정 ${gateType}` : 'OUT'}</span><strong>?</strong></div>
+        <div className="value-card-front"><span style={{fontSize:10,fontWeight:800}}>{gateType ? `고정 ${gateType}` : 'OUT'}</span><strong>{revealed ? value : '?'}</strong></div>
+        <div className="value-card-back"><span style={{fontSize:10,fontWeight:800}}>{gateType ? `고정 ${gateType}` : 'OUT'}</span><strong>?</strong></div>
       </div>
       {activeSignal !== undefined && <SignalDot value={activeSignal} />}
     </motion.div>
@@ -183,9 +186,10 @@ export function MapPreview({ map }) {
       return <g key={node.id} transform={`translate(${node.x} ${node.y})`}>
         {isSlot ? <>
           <rect x="-33" y="-47" width="66" height="94" rx="8" className={node.type === 'wild' ? 'preview-slot wild' : 'preview-slot'} />
-          <text x="0" y="4" textAnchor="middle" fontSize="17" fontWeight="800" fill="currentColor">{node.stage}</text>
+          <text x="0" y="4" textAnchor="middle" fontSize="17" fontWeight="800" fill="currentColor">{node.type === 'wild' ? '↔' : '＋'}</text>
         </> : <>
           <rect x="-24" y="-34" width="48" height="68" rx="7" className={node.type === 'output' ? 'preview-io output' : 'preview-io'} />
+          {node.type === 'input' && <text x="0" y="4" textAnchor="middle" fontSize="17" fontWeight="800" fill="currentColor">{node.id}</text>}
           {node.type === 'output' && node.gateType && <text x="0" y="4" textAnchor="middle" fontSize="11" fontWeight="900" fill="currentColor">{node.gateType}</text>}
         </>}
       </g>
@@ -196,7 +200,6 @@ export function MapPreview({ map }) {
 export function GameBoard({ map, game, viewerId, selectedAction, onSlotClick, revealAllInputs = false, solution = null, revealIndex = -1, resolving = false, inputSelection = null }) {
   const [focusedNode, setFocusedNode] = useState(null)
   const legalSlots = selectedAction ? legalSlotIds(game, selectedAction) : []
-  const activeStage = currentStage(game)
   const revealNodeIndex = solution?.revealOrder ? Object.fromEntries(solution.revealOrder.map((id, index) => [id, index])) : {}
   const nodeRevealed = (nodeId, type) => {
     if (!solution) return false
@@ -244,7 +247,7 @@ export function GameBoard({ map, game, viewerId, selectedAction, onSlotClick, re
             const draftValue = canChooseHere ? inputSelection.draft?.[node.id] : undefined
             const shownValue = canChooseHere ? draftValue : (inputValue ?? ownedValue)
             const revealValue = canChooseHere ? draftValue !== undefined : (inputValue !== null || revealAllInputs)
-            return <div key={node.id} data-node-id={node.id} className={`board-node input-node ${canChooseHere ? 'input-node-selectable' : ''} ${draftValue !== undefined ? 'input-node-chosen' : ''} ${focusedNode === node.id ? 'is-focused' : ''}`} style={style} {...focusProps}>
+            return <div key={node.id} data-node-id={node.id} className={`board-node input-node ${canChooseHere ? 'input-node-selectable' : ''} ${draftValue !== undefined ? 'input-node-chosen' : ''} ${inputSelection?.selected?.id === node.id ? 'input-drop-target' : ''} ${focusedNode === node.id ? 'is-focused' : ''}`} style={style} {...focusProps}>
               <BoardInputCard
                 id={node.id}
                 value={shownValue}
@@ -252,7 +255,7 @@ export function GameBoard({ map, game, viewerId, selectedAction, onSlotClick, re
                 reveal={revealValue}
                 activeSignal={signal}
                 layoutId={canChooseHere && draftValue !== undefined ? inputCardLayoutId(node.id, draftValue) : undefined}
-                onClick={canChooseHere && draftValue !== undefined ? () => inputSelection.onChange?.(node.id, undefined) : undefined}
+                onClick={canChooseHere ? () => inputSelection.onPlace?.(node.id) : undefined}
               />
             </div>
           }
@@ -265,11 +268,14 @@ export function GameBoard({ map, game, viewerId, selectedAction, onSlotClick, re
 
           const placement = game.placements?.[node.id]
           const legal = legalSlots.includes(node.id)
-          const isCurrentStage = (node.stage ?? 1) === activeStage
-          return <button key={node.id} type="button" data-slot-id={node.id} data-node-id={node.id} data-stage={node.stage ?? 1} className={`board-node card-slot ${node.type === 'wild' ? 'wild-slot' : ''} ${legal ? 'legal' : ''} ${placement ? 'filled' : ''} ${isCurrentStage ? 'current-stage-slot' : 'future-stage-slot'} ${focusedNode === node.id ? 'is-focused' : ''} ${signalVisible ? 'signal-resolved' : ''}`} style={style} onClick={() => legal && onSlotClick(node.id)} disabled={!legal && !placement} {...focusProps}>
+          const isCurrentStage = true
+          const pairedPreview = !placement && selectedAction?.kind === 'wild' && focusedNode && focusedNode !== node.id && legalSlots.includes(focusedNode) && legal
+          const previewType = pairedPreview ? (selectedAction.side === 'NOT' ? '통과' : 'NOT') : null
+          return <button key={node.id} type="button" data-slot-id={node.id} data-node-id={node.id} data-stage={node.stage ?? 1} className={`board-node card-slot ${node.type === 'wild' ? 'wild-slot' : ''} ${legal ? 'legal' : ''} ${placement ? 'filled' : ''} ${isCurrentStage ? 'current-stage-slot' : 'future-stage-slot'} ${focusedNode === node.id ? 'is-focused' : ''} ${signalVisible ? 'signal-resolved' : ''}`} style={style} onClick={() => legal && onSlotClick(node.id)} aria-label={`${node.id} ${node.type === 'wild' ? 'NOT 또는 통과 자리' : '게이트 자리'}${placement ? ` · ${placement.cardType === 'EMPTY' ? '통과' : placement.cardType}` : legal ? ' · 놓기 가능' : ''}`} aria-disabled={!legal} {...focusProps}>
             {!placement ? <>
               <div className="slot-print" aria-hidden="true" />
-              <span aria-hidden="true" style={{position:'absolute',top:-7,right:-7,zIndex:8,minWidth:22,height:22,borderRadius:11,display:'grid',placeItems:'center',font:'800 10px/1 IBM Plex Mono',background:isCurrentStage?'#17191c':'#ded8cd',color:isCurrentStage?'#fff':'#625d55',boxShadow:'0 1px 5px rgba(0,0,0,.18)'}}>{node.stage ?? 1}</span>
+              <span className="slot-kind">{previewType ? `자동 ${previewType}` : node.type === 'wild' ? 'NOT / 통과' : '게이트'}</span>
+
             </> : placement.kind === 'gate' ? <GateCard card={{ id: placement.cardId, type: placement.cardType }} compact owner={placement.playerId} layoutId={`card-${placement.cardId}`} /> : <WildCard playerId={placement.playerId} side={placement.cardType} compact layoutId={placement.auto ? `wild-auto-${node.id}-${placement.turn}` : `wild-p${placement.playerId}`} />}
             {signal !== undefined && <SignalDot value={signal} />}
           </button>
@@ -279,17 +285,8 @@ export function GameBoard({ map, game, viewerId, selectedAction, onSlotClick, re
   )
 }
 
-function GateReference() {
-  return <details style={{fontSize:11,opacity:.88,maxWidth:420}}>
-    <summary style={{cursor:'pointer',fontWeight:800}}>게이트 진리표</summary>
-    <div style={{display:'grid',gap:3,marginTop:6,fontFamily:'IBM Plex Mono, monospace'}}>
-      {Object.entries(GATE_TRUTH).map(([gate, truth]) => <span key={gate}><b>{gate}</b> · {truth}</span>)}
-      <span><b>WILD</b> · 선택한 경로가 NOT이면 반대 경로는 자동 통과</span>
-    </div>
-  </details>
-}
-
-export function PlayerHand({ player, playerId, label, isCurrent, selectedAction, wildSide, onSelectAction, onFlipWild, onDragAction, dealing, opponent = false }) {
+export function PlayerHand({ game, player, playerId, label, isCurrent, selectedAction, wildSide, onSelectAction, onFlipWild, onDragAction, dealing, opponent = false }) {
+  const [helpOn, setHelpOn] = useState(() => { try { return localStorage.getItem('logic-card-help') === 'on' } catch { return false } })
   const cards = player.hand
   const center = (cards.length - 1) / 2
 
@@ -303,13 +300,14 @@ export function PlayerHand({ player, playerId, label, isCurrent, selectedAction,
 
   return <section className={`player-hand current-hand ${isCurrent ? 'is-current' : ''}`}>
     <div className="hand-label"><span className={`player-pip player-${playerId + 1}`} /><strong>{label || PLAYER_META[playerId].name}</strong><small>{isCurrent ? '내 차례' : `${cards.length}장`}</small></div>
-    <GateReference />
+    <label className="card-help-toggle"><input type="checkbox" checked={helpOn} onChange={event => { setHelpOn(event.target.checked); try { localStorage.setItem('logic-card-help', event.target.checked ? 'on' : 'off') } catch {} }} />카드 도움말</label>
+    {helpOn && <div className="selected-card-help" aria-live="polite">{selectedAction?.kind === 'gate' ? <><b>{selectedAction.cardType}</b><span>{GATE_TRUTH[selectedAction.cardType]}</span></> : selectedAction?.kind === 'wild' ? <><b>NOT · 0↔1 / 통과 · 그대로</b><span>한쪽을 놓으면 반대쪽은 자동으로 정해집니다. 턴을 넘기는 카드가 아닙니다.</span></> : '카드를 선택하면 입력별 결과를 볼 수 있습니다. 덱은 AND·NAND·OR·NOR·XOR 각 4장입니다.'}</div>}
     <div className="hand-fan">
       {cards.map((card, index) => {
         const selected = selectedAction?.kind === 'gate' && selectedAction.cardId === card.id
         const rotate = (index - center) * 3.1
         const translateY = Math.abs(index - center) * 2.5
-        return <motion.div key={card.id} className="hand-card-wrap" style={{ zIndex: index + 1 }} animate={{ rotate, y: translateY }} transition={{ type: 'spring', stiffness: 420, damping: 34 }}><GateCard card={card} owner={playerId} selected={selected} disabled={!isCurrent} onSelect={() => onSelectAction?.(getActionForCard(card))} onDragEnd={(event) => onDragAction?.(getActionForCard(card), event)} dealFromCenter={dealing} dealDelay={(card.dealOrder || 0) * 0.07} /></motion.div>
+        return <motion.div key={card.id} className="hand-card-wrap" style={{ zIndex: index + 1 }} animate={{ rotate, y: translateY }} transition={{ type: 'spring', stiffness: 420, damping: 34 }}><GateCard card={card} owner={playerId} selected={selected} disabled={!isCurrent || (game && !legalSlotIds(game, getActionForCard(card), playerId).length)} onSelect={() => onSelectAction?.(getActionForCard(card))} onDragEnd={(event) => onDragAction?.(getActionForCard(card), event)} dealFromCenter={dealing} dealDelay={(card.dealOrder || 0) * 0.07} /></motion.div>
       })}
       {!player.wildUsed && <motion.div className="hand-card-wrap wild-in-hand" style={{ zIndex: cards.length + 2 }}><WildCard playerId={playerId} side={wildSide} selected={selectedAction?.kind === 'wild'} disabled={!isCurrent} onSelect={() => onSelectAction?.(getWildAction(playerId, wildSide))} onFlip={onFlipWild} onDragEnd={(event) => onDragAction?.(getWildAction(playerId, wildSide), event)} dealFromCenter={dealing} /></motion.div>}
     </div>
@@ -327,7 +325,7 @@ export function TurnCurtain({ playerId, onReady }) {
 export function CoinOverlay({ winnerId, viewerId = null, onDone }) {
   const firstPlayerId = 1 - winnerId
   const name = (id) => viewerId === null ? `플레이어 ${id + 1}` : (id === viewerId ? '당신' : '상대')
-  return <motion.div className="coin-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className={`coin player-${winnerId + 1}`} initial={{ rotateY: 0, y: -80, scale: 0.5 }} animate={{ rotateY: 1080, y: 0, scale: 1 }} transition={{ duration: 1.05, ease: [0.2, 0.7, 0.2, 1] }}>{viewerId === null ? winnerId + 1 : (winnerId === viewerId ? '나' : '상대')}</motion.div><motion.div className="coin-copy" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.72 }}><span>순서 정하기</span><strong>{name(winnerId)}이 목표를 고릅니다.</strong><small>{name(firstPlayerId)}이 1단계를 먼저 시작합니다.</small><button type="button" onClick={onDone}>확인</button></motion.div></motion.div>
+  return <motion.div className="coin-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className={`coin player-${winnerId + 1}`} initial={{ rotateY: 0, y: -80, scale: 0.5 }} animate={{ rotateY: 1080, y: 0, scale: 1 }} transition={{ duration: 1.05, ease: [0.2, 0.7, 0.2, 1] }}>{viewerId === null ? winnerId + 1 : (winnerId === viewerId ? '나' : '상대')}</motion.div><motion.div className="coin-copy" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.72 }}><span>순서 정하기</span><strong>{name(winnerId)}이 목표를 고릅니다.</strong><small>{name(firstPlayerId)}이 먼저 카드를 놓습니다.</small><button type="button" onClick={onDone}>확인</button></motion.div></motion.div>
 }
 
 export function TargetChoice({ playerId, personal = false, onChoose }) {
@@ -335,41 +333,45 @@ export function TargetChoice({ playerId, personal = false, onChoose }) {
 }
 
 export function InputChoice({ game, playerId, personal = false, draft, onChange, onSubmit }) {
+  const [selected, setSelected] = useState(null)
   const assigned = game.players[playerId].assignedInputs
   const opponentAssigned = game.players[1 - playerId].assignedInputs
   const complete = assigned.every((id) => draft[id] !== undefined)
   const map = MAP_BY_ID[game.mapId]
   return <motion.div className={`phase-panel input-phase input-board-phase player-panel-${playerId + 1}`} initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}>
     <div className="input-board-heading">
-      <div><span className="eyebrow">비밀 입력</span><h2>{personal ? '입력 카드를 보드에 놓으세요.' : `플레이어 ${playerId + 1}, 입력 카드를 보드에 놓으세요.`}</h2></div>
+      <div><span className="eyebrow">비밀 입력</span><h2>{personal ? '0·1 카드를 골라 내 자리에 놓으세요.' : `플레이어 ${playerId + 1}, 입력 카드를 보드에 놓으세요.`}</h2></div>
       <div className="input-privacy-copy"><strong>내 위치 · {assigned.join(' · ')}</strong><span>상대 위치 · {opponentAssigned.join(' · ')}</span><small>위치는 서로 보이지만, 놓은 카드의 0/1 값은 상대에게 공개되지 않습니다.</small></div>
     </div>
     <div className="input-board-live">
-      <GameBoard map={map} game={game} viewerId={playerId} selectedAction={null} onSlotClick={() => {}} inputSelection={{ playerId, draft, onChange }} />
+      <GameBoard map={map} game={game} viewerId={playerId} selectedAction={null} onSlotClick={() => {}} inputSelection={{ playerId, draft, selected, onPlace: id => { if (selected?.id === id) { onChange(id, selected.value); setSelected(null) } else if (draft[id] !== undefined) { onChange(id, undefined); setSelected(null) } } }} />
     </div>
     <div className="input-card-rack" aria-label="비밀 입력 카드">
       {assigned.map((id, pairIndex) => {
-        const selected = draft[id]
+        const placedValue = draft[id]
         return <div className="input-card-pair" key={id}>
-          <div className="input-card-pair-label"><b>{id}</b><span>{selected === undefined ? '카드 선택' : `${selected} 놓음`}</span></div>
+          <div className="input-card-pair-label"><b>{id}</b><span>{placedValue === undefined ? '내 자리' : `${placedValue} 놓음`}</span></div>
           <div className="input-card-pair-cards">
-            {[0, 1].map((value) => <div className="input-choice-card-slot" key={value}>
-              {selected === value
+            {[0, 1].map((value) => <div className={`input-choice-card-slot ${selected?.id === id && selected.value === value ? 'is-selected' : ''}`} key={value}>
+              {placedValue === value
                 ? <div className="input-choice-card-placeholder" aria-hidden="true" />
-                : <InputChoiceCard inputId={id} value={value} order={pairIndex * 2 + value} onSelect={() => onChange(id, value)} />}
+                : <InputChoiceCard inputId={id} value={value} order={pairIndex * 2 + value} onSelect={() => setSelected(current => current?.id === id && current.value === value ? null : { id, value })} />}
             </div>)}
           </div>
         </div>
       })}
     </div>
     <div className="input-board-footer">
-      <span>{complete ? '모두 놓았습니다. 보드의 내 입력 카드를 누르면 다시 손으로 가져올 수 있습니다.' : '아래 0/1 카드를 골라 실제 입력 위치에 놓으세요.'}</span>
-      <motion.button className="primary-button" type="button" disabled={!complete} onClick={onSubmit} animate={complete ? { scale: [1, 1.025, 1] } : { scale: 1 }} transition={{ duration: .34 }}>입력 확정</motion.button>
+      <span>{selected ? `${selected.value} 카드 선택 · 빛나는 ${selected.id} 자리를 누르세요.` : complete ? '모두 놓았습니다. 내 입력 카드를 누르면 다시 가져올 수 있습니다.' : '0 또는 1 카드를 선택한 뒤, 보드의 같은 글자 자리를 누르세요.'}</span>
+      <motion.button className="primary-button" type="button" disabled={!complete || Boolean(selected)} onClick={onSubmit} animate={complete ? { scale: [1, 1.025, 1] } : { scale: 1 }} transition={{ duration: .34 }}>입력 확정</motion.button>
     </div>
   </motion.div>
 }
 
 export function ResultOverlay({ game, onReplay, onMenu, onNewSeed }) {
+  const [inspect, setInspect] = useState(false)
   const won = (game.result?.winner ?? 0) === 0
-  return <motion.div className="result-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }}><motion.div className={`result-card player-${won ? 1 : 2}`} initial={{ y: 45, scale: 0.9 }} animate={{ y: 0, scale: 1 }} transition={{ type: 'spring', stiffness: 230, damping: 22 }}><div className="result-output"><span>결과</span><strong>{game.result?.output}</strong></div><h2>{won ? '승리했습니다!' : '상대가 이겼습니다'}</h2><div className="result-actions"><button onClick={onReplay}>같은 판 다시</button><button onClick={onNewSeed}>새 판</button><button onClick={onMenu}>맵 선택</button></div></motion.div></motion.div>
+  if (inspect) return <button className="show-result-button" onClick={() => setInspect(false)}>결과 다시 보기</button>
+  return <motion.div className="result-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }}><motion.div className={`result-card player-${won ? 1 : 2}`} initial={{ y: 45, scale: 0.9 }} animate={{ y: 0, scale: 1 }} transition={{ type: 'spring', stiffness: 230, damping: 22 }}><div className="result-output"><span>결과</span><strong>{game.result?.output}</strong></div><h2>{won ? '승리했습니다!' : '상대가 이겼습니다'}</h2><div className="result-actions"><button onClick={() => setInspect(true)}>보드 살펴보기</button><button onClick={onReplay}>같은 판 다시</button><button onClick={onNewSeed}>새 판</button><button onClick={onMenu}>맵 선택</button></div></motion.div></motion.div>
 }
+

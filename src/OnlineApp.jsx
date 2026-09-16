@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion'
 import { CoinOverlay, DeckStack, GameBoard, InputChoice, MapPreview, PlayerHand, TargetChoice } from './components.jsx'
-import { chooseTarget, createGame, finishGame, nextInputPlayer, playMove, recordFromGame, resolveGame, setPlayerInputs } from './game.js'
+import { RULES_VERSION, chooseTarget, createGame, finishGame, nextInputPlayer, playMove, recordFromGame, resolveGame, setPlayerInputs } from './game.js'
 import { MAPS, MAP_BY_ID } from './maps.js'
 import { setSoundEnabled, sound } from './audio.js'
 import { createGuestPeer, createHostPeer, inviteUrl, makeRoomCode, snapshotForPlayer } from './online.js'
@@ -74,20 +74,23 @@ function Lobby({ role, playerId, roomCode, connected, connectionState, disconnec
   </div></main>
 }
 
-function WaitingPanel({ children }) { return <motion.div className="phase-panel online-waiting" initial={{opacity:0,y:12}} animate={{opacity:1,y:0}}><span className="eyebrow">OPPONENT ACTION</span><h2>{children}</h2><div className="loader-line"/></motion.div> }
+function WaitingPanel({ children }) { return <motion.div className="phase-panel online-waiting" initial={{opacity:0,y:12}} animate={{opacity:1,y:0}}><span className="eyebrow">상대 차례</span><h2>{children}</h2><div className="loader-line"/></motion.div> }
 
 function OnlineResult({ game, playerId, role, onReplay, onChooseMap, onMenu }) {
+  const [inspect, setInspect] = useState(false)
   const won = game.result?.winner === playerId
+  if (inspect) return <button className="show-result-button" onClick={() => setInspect(false)}>결과 다시 보기</button>
   const winner = game.result?.winner ?? 0
   return createPortal(<motion.div className="online-result-overlay" role="dialog" aria-modal="true" aria-labelledby="online-result-title" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} transition={{duration:.28}}>
     <div className={`result-burst ${won?'win-burst':'lose-burst'}`}/>
     <motion.div className={`online-result-card ${won?'won':'lost'}`} initial={{scale:.76,y:42,rotateX:10}} animate={{scale:1,y:0,rotateX:0}} exit={{scale:.9,opacity:0}} transition={{type:'spring',stiffness:240,damping:21}}>
-      <motion.span initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} transition={{delay:.18}}>{won?'VICTORY':'DEFEAT'}</motion.span>
+      <motion.span initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} transition={{delay:.18}}>{won?'승리':'패배'}</motion.span>
       <motion.h2 id="online-result-title" initial={{opacity:0,scale:.9}} animate={{opacity:1,scale:1}} transition={{delay:.24}}>{won?'당신이 이겼습니다!':'상대가 이겼습니다'}</motion.h2>
-      <motion.div className="result-output-orb" initial={{scale:0,rotate:-20}} animate={{scale:1,rotate:0}} transition={{delay:.3,type:'spring',stiffness:280,damping:18}}><small>FINAL OUTPUT</small><strong>{game.result?.output}</strong></motion.div>
+      <motion.div className="result-output-orb" initial={{scale:0,rotate:-20}} animate={{scale:1,rotate:0}} transition={{delay:.3,type:'spring',stiffness:280,damping:18}}><small>결과</small><strong>{game.result?.output}</strong></motion.div>
       <div className="result-player-summary">
         {[playerId,1-playerId].map((id,index)=><motion.div key={id} className={`${winner===id?'winner':''} ${playerId===id?'is-me':''}`} initial={{opacity:0,x:index===0?-18:18}} animate={{opacity:1,x:0}} transition={{delay:.38+index*.08}}><span>{playerId===id?'나':'상대'}</span><b>목표 {game.players[id]?.target}</b><em>{winner===id?'승리':'패배'}</em></motion.div>)}
       </div>
+      <button className="online-secondary-button" onClick={() => setInspect(true)}>보드 살펴보기</button>
       {role==='host'?<div className="result-actions-online host-result-actions"><button className="online-primary" onClick={onReplay}>이 맵 다시 하기</button><button className="online-secondary-button choose-map-button" onClick={onChooseMap}>다른 맵 선택</button><button className="online-secondary-button" onClick={onMenu}>방 나가기</button></div>:<><p className="rematch-notice waiting"><i/> 방장이 다음 게임을 고르는 중입니다.</p><div className="result-actions-online guest-result-actions"><button className="online-secondary-button" onClick={onMenu}>방 나가기</button></div></>}
     </motion.div>
   </motion.div>, document.body)
@@ -200,8 +203,10 @@ export default function OnlineApp() {
     if(!recovery){ const url=new URL(window.location.href); url.search='?online=1'; window.history.replaceState({},'',url); setRoomCode(''); setError('이 기기에서 복구할 호스트 세션을 찾지 못했습니다. 새 방을 만들어 주세요.'); return }
     cleanup(); resetConnectionTracking(); roomRef.current=code; mapRef.current=recovery.mapId||MAPS[0].id
     setRole('host'); setPlayerId(0); setRoomCode(code); setMapId(mapRef.current); setConnected(false); setError('')
-    setScreen(recovery.game?'game':'lobby')
-    createHostSession(code,mapRef.current,{resumeGame:recovery.game||null})
+    const compatibleGame=recovery.game?.rulesVersion===RULES_VERSION?recovery.game:null
+    setScreen(compatibleGame?'game':'lobby')
+    if(recovery.game&&!compatibleGame){setError('규칙이 업데이트되었습니다. 같은 방에서 새 판을 시작하세요.');saveHostRecovery(null)}
+    createHostSession(code,mapRef.current,{resumeGame:compatibleGame})
   }
 
   function joinRoom(codeValue){
@@ -275,7 +280,7 @@ export default function OnlineApp() {
     } else if(data.command==='inputs'){
       const next=setPlayerInputs(current,1,data.values||{}); if(next!==current)hostCommit(next,{deal:current.phase!=='play'&&next.phase==='play',sound:'flip'})
     } else if(data.command==='move'){
-      const next=playMove(current,data.slotId,data.action); if(next!==current)hostCommit(next,{sound:'place'})
+      if(current.currentPlayer!==1)return; const next=playMove(current,data.slotId,data.action); if(next!==current)hostCommit(next,{sound:'place'})
     } else if(data.command==='resolve') beginResolutionHost()
   }
 
@@ -387,19 +392,19 @@ export default function OnlineApp() {
 
   const me=game.players[playerId]
   const myTurn=connectionState!=='closed'&&!syncingAction&&game.phase==='play'&&game.currentPlayer===playerId&&!dealing&&!resolving
-  const phaseText=game.phase==='target_choice'?'목표 선택':game.phase==='input_selection'?'비밀 INPUT':game.phase==='play'?(myTurn?'내 차례':'상대 차례'):game.phase==='reveal'?'회로 계산 중':'게임 종료'
+  const phaseText=game.phase==='target_choice'?'목표 선택':game.phase==='input_selection'?'입력 카드':game.phase==='play'?(myTurn?'내 차례':'상대 차례'):game.phase==='reveal'?'계산 중':'게임 종료'
   const connectionLabel=connected?'CONNECTED':connectionState==='reconnecting'?'RECONNECTING…':connectionState==='closed'?'ROOM CLOSED':'CONNECTING…'
   return <LayoutGroup><main className="game-page online-game-page">
     <header className="online-game-bar simplified"><button onClick={leave}>← 처음으로</button><div><strong>{map.name}</strong></div>{!connected?<div className="connection-chip">{connectionLabel}</div>:<span/>}</header>
-    <section className={`status-row focus-status ${myTurn?'is-my-turn':'is-opponent-turn'}`}><div className={`target-badge player-${playerId+1} ${myTurn?'current':''}`}><span>내 목표</span><strong>{game.players[playerId].target??'?'}</strong></div><div className="phase-status"><span>{phaseText}</span><strong>{game.phase==='play'?(myTurn?'카드를 선택해 빈칸에 놓으세요':'상대가 카드를 놓을 때까지 기다리세요'):map.description}</strong></div><div className={`target-badge player-${opponentId+1} ${game.phase==='play'&&!myTurn?'current':''}`}><span>상대 목표</span><strong>{game.players[opponentId].target??'?'}</strong></div></section>
+    <section className={`status-row focus-status ${myTurn?'is-my-turn':'is-opponent-turn'}`}><div className={`target-badge player-${playerId+1} ${myTurn?'current':''}`}><span>내 목표</span><strong>{game.players[playerId].target??'?'}</strong></div><div className="phase-status"><span>{phaseText}</span><strong>{game.phase==='play'?(myTurn?'카드를 골라 원하는 빈칸에 놓으세요':'상대가 카드를 놓을 때까지 기다리세요'):''}</strong></div><div className={`target-badge player-${opponentId+1} ${game.phase==='play'&&!myTurn?'current':''}`}><span>상대 목표</span><strong>{game.players[opponentId].target??'?'}</strong></div></section>
 
     {game.phase==='target_choice'&&!coinVisible&&(game.targetChooser===playerId?<TargetChoice playerId={playerId} personal onChoose={handleTarget}/>:<WaitingPanel>상대가 목표를 고르는 중입니다.</WaitingPanel>)}
-    {game.phase==='input_selection'&&(inputPlayer===playerId?<InputChoice game={game} playerId={playerId} personal draft={inputDraft} onChange={(id,value)=>setInputDraft((draft)=>({...draft,[id]:value}))} onSubmit={submitInputs}/>:<WaitingPanel>상대가 비밀 INPUT을 정하는 중입니다.</WaitingPanel>)}
+    {game.phase==='input_selection'&&(inputPlayer===playerId?<InputChoice game={game} playerId={playerId} personal draft={inputDraft} onChange={(id,value)=>setInputDraft((draft)=>({...draft,[id]:value}))} onSubmit={submitInputs}/>:<WaitingPanel>상대가 입력 카드을 정하는 중입니다.</WaitingPanel>)}
 
     {(game.phase==='play'||game.phase==='reveal'||game.phase==='finished')&&<div className="table-layout online-table-layout">
       <div className="opponent-area"><OpponentPrivate isCurrent={game.phase==='play'&&game.currentPlayer===opponentId}/></div>
-      <div className="board-zone"><div className="deck-floating"><DeckStack count={game.deck?.length??0} dealing={dealing}/></div><GameBoard map={map} game={game} viewerId={playerId} selectedAction={selectedAction} onSlotClick={placeAction} revealAllInputs={game.phase==='reveal'||game.phase==='finished'||resolving} solution={solution||game.result} revealIndex={game.phase==='finished'?999:revealIndex} resolving={resolving}/></div>
-      <div className="current-area"><PlayerHand player={me} playerId={playerId} label="내 카드" isCurrent={myTurn} selectedAction={selectedAction} wildSide={wildSide} onSelectAction={selectAction} onFlipWild={()=>{if(connectionState==='closed')return;setWildSide((side)=>side==='NOT'?'EMPTY':'NOT');sound('flip')}} onDragAction={handleDrag} dealing={dealing}/>{selectedAction&&myTurn&&<div className="placement-hint">빛나는 빈칸에 놓으세요. <button onClick={()=>setSelectedAction(null)}>취소</button></div>}</div>
+      <div className="board-zone"><GameBoard map={map} game={game} viewerId={playerId} selectedAction={selectedAction} onSlotClick={placeAction} revealAllInputs={game.phase==='reveal'||game.phase==='finished'||resolving} solution={solution||game.result} revealIndex={game.phase==='finished'?999:revealIndex} resolving={resolving}/></div>
+      <div className="current-area"><PlayerHand game={game} player={me} playerId={playerId} label="내 카드" isCurrent={myTurn} selectedAction={selectedAction} wildSide={wildSide} onSelectAction={selectAction} onFlipWild={()=>{if(connectionState==='closed')return;const side=wildSide==='NOT'?'EMPTY':'NOT';setWildSide(side);setSelectedAction(action=>action?.kind==='wild'?{...action,side}:action);sound('flip')}} onDragAction={handleDrag} dealing={dealing}/>{selectedAction&&myTurn&&<div className="placement-hint">빛나는 빈칸에 놓으세요. <button onClick={()=>setSelectedAction(null)}>취소</button></div>}</div>
     </div>}
 
     <AnimatePresence>{coinVisible&&<CoinOverlay winnerId={game.coinWinner} viewerId={playerId} onDone={()=>setCoinVisible(false)}/>} {dealing&&<motion.div className="deal-banner" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}><span>카드 준비 중</span><strong>잠시만 기다려 주세요</strong></motion.div>} {game.phase==='finished'&&<OnlineResult game={game} playerId={playerId} role={role} onReplay={requestReplay} onChooseMap={chooseAnotherMap} onMenu={leave}/>}</AnimatePresence>
@@ -408,3 +413,4 @@ export default function OnlineApp() {
     {copied&&<div className="copy-toast">초대 문구 · 방 코드 · 링크 복사됨</div>}
   </main></LayoutGroup>
 }
+

@@ -3,7 +3,7 @@ import { MAP_BY_ID } from './maps.js'
 export const GATE_TYPES = ['AND', 'NAND', 'OR', 'NOR', 'XOR']
 export const GATE_COPIES = { AND: 4, NAND: 4, OR: 4, NOR: 4, XOR: 4 }
 export const HAND_SIZE = { 1: 4, 2: 5 }
-export const RULES_VERSION = 'staged-information-v1'
+export const RULES_VERSION = 'free-placement-v2'
 export const PLAYER_META = [
   { id: 0, name: 'PLAYER 1', short: 'P1', className: 'player-one' },
   { id: 1, name: 'PLAYER 2', short: 'P2', className: 'player-two' },
@@ -42,18 +42,8 @@ export function currentStage(game) {
   const map = MAP_BY_ID[game.mapId]
   return game.stage ?? stageNumbers(map)[0] ?? 1
 }
-function stageSlotNodes(map, stage) {
-  return map.nodes.filter((node) => (node.type === 'gate' || node.type === 'wild') && (node.stage ?? 1) === stage)
-}
-function stageComplete(game, stage) {
-  const map = MAP_BY_ID[game.mapId]
-  return stageSlotNodes(map, stage).every((node) => Boolean(game.placements?.[node.id]))
-}
 function allSlotsComplete(game) {
   return slotIds(MAP_BY_ID[game.mapId]).every((id) => Boolean(game.placements?.[id]))
-}
-function nextStageAfter(game, stage) {
-  return stageNumbers(MAP_BY_ID[game.mapId]).find((value) => value > stage && !stageComplete(game, value)) ?? null
 }
 function pairedWildNode(map, node) {
   if (!node?.pair) return null
@@ -86,7 +76,7 @@ export function createGame(mapId, mode = 'local', seed = Math.floor(Math.random(
 }
 
 export function chooseTarget(game, playerId, target) {
-  if (game.phase !== 'target_choice' || game.targetChooser !== playerId) return game
+  if (![0, 1].includes(target) || game.phase !== 'target_choice' || game.targetChooser !== playerId) return game
   const next = clone(game)
   next.players[playerId].target = target
   next.players[1 - playerId].target = 1 - target
@@ -107,8 +97,9 @@ export function randomInputsForPlayer(game, playerId) {
 export function setPlayerInputs(game, playerId, values) {
   if (game.phase !== 'input_selection') return game
   const player = game.players[playerId]
+  if (!player) return game
   const alreadyLocked = player.inputsLocked ?? Object.keys(player.inputValues).length > 0
-  if (alreadyLocked || player.assignedInputs.some((id) => values[id] === undefined)) return game
+  if (!player || alreadyLocked || !values || Object.keys(values).length !== player.assignedInputs.length || player.assignedInputs.some((id) => ![0, 1].includes(values[id]))) return game
   const next = clone(game)
   next.players[playerId].inputValues = { ...values }
   next.players[playerId].inputsLocked = true
@@ -146,12 +137,11 @@ export function legalSlotIds(game, action, playerId = game.currentPlayer) {
   if (game.phase !== 'play' || !action || playerId !== game.currentPlayer) return []
   const map = MAP_BY_ID[game.mapId]
   const placements = game.placements || {}
-  const stage = currentStage(game)
   if (action.kind === 'gate') {
-    return map.nodes.filter((node) => node.type === 'gate' && (node.stage ?? 1) === stage && !placements[node.id]).map((node) => node.id)
+    return map.nodes.filter((node) => node.type === 'gate' && !placements[node.id]).map((node) => node.id)
   }
-  if (game.players[playerId].wildUsed) return []
-  return map.nodes.filter((node) => node.type === 'wild' && (node.stage ?? 1) === stage && !placements[node.id] && !wildPairResolved(game, node)).map((node) => node.id)
+  if (action.kind !== 'wild' || !['NOT', 'EMPTY'].includes(action.side) || game.players[playerId].wildUsed) return []
+  return map.nodes.filter((node) => node.type === 'wild' && !placements[node.id] && !wildPairResolved(game, node)).map((node) => node.id)
 }
 export function allLegalActions(game, playerId = game.currentPlayer) {
   if (game.phase !== 'play' || playerId !== game.currentPlayer) return []
@@ -205,15 +195,6 @@ export function playMove(game, slotId, action) {
     next.phase = 'reveal'
     return next
   }
-  if (stageComplete(next, stage)) {
-    const followingStage = nextStageAfter(next, stage)
-    if (followingStage !== null) {
-      next.stage = followingStage
-      next.stageStarter = 1 - (next.stageStarter ?? next.firstPlayer)
-      next.currentPlayer = next.stageStarter
-      return next
-    }
-  }
   next.currentPlayer = 1 - next.currentPlayer
   return next
 }
@@ -262,23 +243,33 @@ export function chooseCpuMove(game) {
   const options = allLegalActions(game, 1)
   if (!options.length) return null
   const random = seededRandom((game.seed ^ ((game.turnNumber + 1) * 0x27d4eb2d)) >>> 0)
-  const map = MAP_BY_ID[game.mapId]
-  const knownSignals = { ...game.players[1].inputValues }
-  const scored = options.map((option) => {
-    const node = map.nodes.find((item) => item.id === option.slotId)
-    const inbound = map.edges.filter(([, to]) => to === node.id).map(([from]) => from)
-    const known = inbound.map((id) => knownSignals[id]).every((value) => value !== undefined)
-    let score = random() * 0.8
-    if (option.action.kind === 'wild') score += option.action.side === 'NOT' ? 0.2 : 0.05
-    if (known && option.action.kind === 'gate') {
-      const value = gateOutput(option.action.cardType, knownSignals[inbound[0]], knownSignals[inbound[1]])
-      score += value === game.players[1].target ? 1.1 : 0
+  // Sample only information available to the CPU: its own hand and public moves.
+  const knownIds = new Set([...game.players[1].initialHand, ...game.moves.filter(m => m.kind === 'gate')].map(c => c.id || c.cardId))
+  const unseen = buildDeck().filter(c => !knownIds.has(c.id))
+  const samples = Array.from({ length: 64 }, () => ({
+    hand: shuffle(unseen, random).slice(0, game.players[0].hand.length),
+    inputs: Object.fromEntries(game.players[0].assignedInputs.map(id => [id, random() < .5 ? 0 : 1])),
+    seed: Math.floor(random() * 2147483647),
+  }))
+  const scores = options.map(option => {
+    let wins = 0
+    for (const sample of samples) {
+      let trial = clone(game)
+      trial.players[0].hand = sample.hand
+      trial.players[0].inputValues = sample.inputs
+      trial = playMove(trial, option.slotId, option.action)
+      const rng = seededRandom(sample.seed)
+      for (let step = 0; trial.phase === 'play' && step < 20; step++) {
+        const moves = allLegalActions(trial)
+        if (!moves.length) break
+        const move = moves[Math.floor(rng() * moves.length)]
+        trial = playMove(trial, move.slotId, move.action)
+      }
+      if (trial.phase === 'reveal' && resolveGame(trial).winner === 1) wins++
     }
-    if (node?.stage === Math.max(...stageNumbers(map))) score += 0.12
-    return { ...option, score }
+    return { ...option, score: wins + random() * .01 }
   })
-  scored.sort((a, b) => b.score - a.score)
-  return scored[0]
+  return scores.sort((a, b) => b.score - a.score)[0]
 }
 
 export function recordFromGame(game) {
@@ -292,3 +283,4 @@ export function recordFromGame(game) {
     moves: game.moves.map((move) => ({ ...move })), result: game.result ? { ...game.result, signals: { ...game.result.signals } } : null,
   }
 }
+
