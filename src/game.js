@@ -3,7 +3,7 @@ import { MAP_BY_ID } from './maps.js'
 export const GATE_TYPES = ['AND', 'NAND', 'OR', 'NOR', 'XOR']
 export const GATE_COPIES = { AND: 4, NAND: 4, OR: 4, NOR: 4, XOR: 4 }
 export const HAND_SIZE = { 1: 4, 2: 5 }
-export const RULES_VERSION = 'free-placement-v2'
+export const RULES_VERSION = 'post-input-gate-deal-v3'
 export const PLAYER_META = [
   { id: 0, name: 'PLAYER 1', short: 'P1', className: 'player-one' },
   { id: 1, name: 'PLAYER 2', short: 'P2', className: 'player-two' },
@@ -68,7 +68,7 @@ export function createGame(mapId, mode = 'local', seed = Math.floor(Math.random(
   players[1].assignedInputs = [...(groups[1 - layoutFlip] || [])].sort()
   const coinWinner = random() < 0.5 ? 0 : 1
   return {
-    seed, mode, mapId, phase: 'target_choice', players, deck: shuffle(buildDeck(), random), placements: {}, moves: [], turnNumber: 0,
+    seed, mode, mapId, phase: 'target_choice', players, deck: [], placements: {}, moves: [], turnNumber: 0,
     coinWinner, targetChooser: coinWinner, firstPlayer: 1 - coinWinner, currentPlayer: 1 - coinWinner,
     stage: stageNumbers(map)[0] ?? 1, stageStarter: 1 - coinWinner, inputLayout: players.map((player) => [...player.assignedInputs]),
     startedAt: Date.now(), result: null, rulesVersion: RULES_VERSION,
@@ -105,7 +105,13 @@ export function setPlayerInputs(game, playerId, values) {
   next.players[playerId].inputsLocked = true
   const ready = next.players.every((item) => item.inputsLocked ?? Object.keys(item.inputValues).length === item.assignedInputs.length)
   if (!ready) return next
+
+  // Gate cards do not exist in either player's hand during input setup.
+  // Once both players have locked their 0/1 cards, create and shuffle the gate deck,
+  // then deal the opening hands from that fresh deck.
   const map = MAP_BY_ID[next.mapId]
+  const gateRandom = seededRandom((next.seed ^ 0x9e3779b9) >>> 0)
+  next.deck = shuffle(buildDeck(), gateRandom)
   const handSize = HAND_SIZE[map.level]
   let dealOrder = 0
   for (let round = 0; round < handSize; round += 1) {
@@ -283,4 +289,3 @@ export function recordFromGame(game) {
     moves: game.moves.map((move) => ({ ...move })), result: game.result ? { ...game.result, signals: { ...game.result.signals } } : null,
   }
 }
-
