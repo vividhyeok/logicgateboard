@@ -11,6 +11,7 @@ import './game.css'
 import './board-clarity.css'
 import './launcher.css'
 import './experience.css'
+import './tabletop-effects.js'
 
 const params = new URLSearchParams(window.location.search)
 const onlineMode = params.get('online') === '1' || params.has('room') || params.has('host')
