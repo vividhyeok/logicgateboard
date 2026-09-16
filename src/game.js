@@ -3,6 +3,7 @@ import { MAP_BY_ID } from './maps.js'
 export const GATE_TYPES = ['AND', 'NAND', 'OR', 'NOR', 'XOR']
 export const GATE_COPIES = { AND: 4, NAND: 4, OR: 4, NOR: 4, XOR: 4 }
 export const HAND_SIZE = { 1: 4, 2: 5 }
+export const RULES_VERSION = 'staged-information-v1'
 export const PLAYER_META = [
   { id: 0, name: 'PLAYER 1', short: 'P1', className: 'player-one' },
   { id: 1, name: 'PLAYER 2', short: 'P2', className: 'player-two' },
@@ -34,18 +35,53 @@ function buildDeck() {
 }
 function blankPlayer(id) { return { id, assignedInputs: [], inputValues: {}, inputsLocked: false, target: null, hand: [], initialHand: [], wildUsed: false } }
 
+export function stageNumbers(map) {
+  return [...new Set(map.nodes.filter((node) => node.type === 'gate' || node.type === 'wild').map((node) => node.stage ?? 1))].sort((a, b) => a - b)
+}
+export function currentStage(game) {
+  const map = MAP_BY_ID[game.mapId]
+  return game.stage ?? stageNumbers(map)[0] ?? 1
+}
+function stageSlotNodes(map, stage) {
+  return map.nodes.filter((node) => (node.type === 'gate' || node.type === 'wild') && (node.stage ?? 1) === stage)
+}
+function stageComplete(game, stage) {
+  const map = MAP_BY_ID[game.mapId]
+  return stageSlotNodes(map, stage).every((node) => Boolean(game.placements?.[node.id]))
+}
+function allSlotsComplete(game) {
+  return slotIds(MAP_BY_ID[game.mapId]).every((id) => Boolean(game.placements?.[id]))
+}
+function nextStageAfter(game, stage) {
+  return stageNumbers(MAP_BY_ID[game.mapId]).find((value) => value > stage && !stageComplete(game, value)) ?? null
+}
+function pairedWildNode(map, node) {
+  if (!node?.pair) return null
+  return map.nodes.find((candidate) => candidate.type === 'wild' && candidate.id !== node.id && candidate.pair === node.pair) || null
+}
+function wildPairResolved(game, node) {
+  if (!node?.pair) return Boolean(game.placements?.[node?.id])
+  const map = MAP_BY_ID[game.mapId]
+  return map.nodes.filter((candidate) => candidate.type === 'wild' && candidate.pair === node.pair).some((candidate) => Boolean(game.placements?.[candidate.id]))
+}
+
 export function createGame(mapId, mode = 'local', seed = Math.floor(Math.random() * 2147483647)) {
   const map = MAP_BY_ID[mapId]
   const random = seededRandom(seed)
-  const inputIds = shuffle(map.nodes.filter((node) => node.type === 'input').map((node) => node.id), random)
-  const split = inputIds.length / 2
   const players = [blankPlayer(0), blankPlayer(1)]
-  players[0].assignedInputs = inputIds.slice(0, split).sort()
-  players[1].assignedInputs = inputIds.slice(split).sort()
+  const groups = map.inputGroups || [
+    map.nodes.filter((node) => node.type === 'input').map((node) => node.id).filter((_, index) => index % 2 === 0),
+    map.nodes.filter((node) => node.type === 'input').map((node) => node.id).filter((_, index) => index % 2 === 1),
+  ]
+  const layoutFlip = random() < 0.5 ? 0 : 1
+  players[0].assignedInputs = [...(groups[layoutFlip] || [])].sort()
+  players[1].assignedInputs = [...(groups[1 - layoutFlip] || [])].sort()
   const coinWinner = random() < 0.5 ? 0 : 1
   return {
     seed, mode, mapId, phase: 'target_choice', players, deck: shuffle(buildDeck(), random), placements: {}, moves: [], turnNumber: 0,
-    coinWinner, targetChooser: coinWinner, firstPlayer: 1 - coinWinner, currentPlayer: 1 - coinWinner, startedAt: Date.now(), result: null,
+    coinWinner, targetChooser: coinWinner, firstPlayer: 1 - coinWinner, currentPlayer: 1 - coinWinner,
+    stage: stageNumbers(map)[0] ?? 1, stageStarter: 1 - coinWinner, inputLayout: players.map((player) => [...player.assignedInputs]),
+    startedAt: Date.now(), result: null, rulesVersion: RULES_VERSION,
   }
 }
 
@@ -89,6 +125,8 @@ export function setPlayerInputs(game, playerId, values) {
   }
   next.players.forEach((item) => { item.initialHand = item.hand.map((card) => ({ ...card })) })
   next.phase = 'play'
+  next.stage = stageNumbers(map)[0] ?? 1
+  next.stageStarter = next.firstPlayer
   next.currentPlayer = next.firstPlayer
   return next
 }
@@ -108,9 +146,12 @@ export function legalSlotIds(game, action, playerId = game.currentPlayer) {
   if (game.phase !== 'play' || !action || playerId !== game.currentPlayer) return []
   const map = MAP_BY_ID[game.mapId]
   const placements = game.placements || {}
-  if (action.kind === 'gate') return gateIds(map).filter((id) => !placements[id])
+  const stage = currentStage(game)
+  if (action.kind === 'gate') {
+    return map.nodes.filter((node) => node.type === 'gate' && (node.stage ?? 1) === stage && !placements[node.id]).map((node) => node.id)
+  }
   if (game.players[playerId].wildUsed) return []
-  return wildIds(map).filter((id) => !placements[id])
+  return map.nodes.filter((node) => node.type === 'wild' && (node.stage ?? 1) === stage && !placements[node.id] && !wildPairResolved(game, node)).map((node) => node.id)
 }
 export function allLegalActions(game, playerId = game.currentPlayer) {
   if (game.phase !== 'play' || playerId !== game.currentPlayer) return []
@@ -130,24 +171,50 @@ export function allLegalActions(game, playerId = game.currentPlayer) {
 export function playMove(game, slotId, action) {
   if (game.phase !== 'play' || !legalSlotIds(game, action).includes(slotId)) return game
   const next = clone(game)
+  const map = MAP_BY_ID[next.mapId]
   const player = next.players[next.currentPlayer]
+  const stage = currentStage(next)
+  const elapsedMs = Math.max(0, Date.now() - next.startedAt)
   let placement
   if (action.kind === 'gate') {
     const cardIndex = player.hand.findIndex((card) => card.id === action.cardId)
     if (cardIndex < 0) return game
     const [card] = player.hand.splice(cardIndex, 1)
-    placement = { playerId: next.currentPlayer, slotId, kind: 'gate', cardId: card.id, cardType: card.type, turn: next.turnNumber }
+    placement = { playerId: next.currentPlayer, slotId, kind: 'gate', cardId: card.id, cardType: card.type, turn: next.turnNumber, stage, atMs: elapsedMs }
+    next.placements[slotId] = placement
+    next.moves.push(placement)
   } else {
-    if (player.wildUsed) return game
-    player.wildUsed = true
-    placement = { playerId: next.currentPlayer, slotId, kind: 'wild', cardId: `wild-p${next.currentPlayer}`, cardType: action.side, turn: next.turnNumber }
+    const node = map.nodes.find((item) => item.id === slotId)
+    if (!node || player.wildUsed || wildPairResolved(next, node)) return game
+    const pair = pairedWildNode(map, node)
+    const primaryType = action.side === 'NOT' ? 'NOT' : 'EMPTY'
+    const pairedType = primaryType === 'NOT' ? 'EMPTY' : 'NOT'
+    placement = { playerId: next.currentPlayer, slotId, kind: 'wild', cardId: `wild-p${next.currentPlayer}`, cardType: primaryType, turn: next.turnNumber, stage, atMs: elapsedMs, pair: node.pair || null }
+    next.placements[slotId] = placement
+    next.moves.push(placement)
+    if (pair) {
+      const pairedPlacement = { playerId: next.currentPlayer, slotId: pair.id, kind: 'wild', cardId: `wild-auto-${pair.id}-${next.turnNumber}`, cardType: pairedType, turn: next.turnNumber, stage, atMs: elapsedMs, pair: node.pair || null, auto: true }
+      next.placements[pair.id] = pairedPlacement
+      next.moves.push(pairedPlacement)
+    }
+    next.players.forEach((item) => { item.wildUsed = true })
   }
-  next.placements ||= {}
-  next.placements[slotId] = placement
-  next.moves.push(placement)
   next.turnNumber += 1
-  if (Object.keys(next.placements).length === slotIds(MAP_BY_ID[next.mapId]).length) next.phase = 'reveal'
-  else next.currentPlayer = 1 - next.currentPlayer
+
+  if (allSlotsComplete(next)) {
+    next.phase = 'reveal'
+    return next
+  }
+  if (stageComplete(next, stage)) {
+    const followingStage = nextStageAfter(next, stage)
+    if (followingStage !== null) {
+      next.stage = followingStage
+      next.stageStarter = 1 - (next.stageStarter ?? next.firstPlayer)
+      next.currentPlayer = next.stageStarter
+      return next
+    }
+  }
+  next.currentPlayer = 1 - next.currentPlayer
   return next
 }
 
@@ -182,6 +249,7 @@ export function resolveGame(game) {
     const inputs = map.edges.filter(([, to]) => to === id).map(([from]) => signals[from])
     if (node.type === 'gate') signals[id] = gateOutput(game.placements[id].cardType, inputs[0], inputs[1])
     else if (node.type === 'wild') signals[id] = wildOutput(game.placements[id].cardType, inputs[0])
+    else if (node.type === 'output' && node.gateType) signals[id] = gateOutput(node.gateType, inputs[0], inputs[1])
     else signals[id] = inputs[0]
   })
   const output = signals.OUT
@@ -206,7 +274,7 @@ export function chooseCpuMove(game) {
       const value = gateOutput(option.action.cardType, knownSignals[inbound[0]], knownSignals[inbound[1]])
       score += value === game.players[1].target ? 1.1 : 0
     }
-    if (node.id === 'G5' || node.id === 'G3' || node.id === 'W1') score += 0.15
+    if (node?.stage === Math.max(...stageNumbers(map))) score += 0.12
     return { ...option, score }
   })
   scored.sort((a, b) => b.score - a.score)
@@ -214,10 +282,13 @@ export function chooseCpuMove(game) {
 }
 
 export function recordFromGame(game) {
+  const map = MAP_BY_ID[game.mapId]
   return {
     id: `${Date.now()}-${game.seed}`, playedAt: new Date().toISOString(), seed: game.seed, mode: game.mode, mapId: game.mapId,
+    mapVersion: map?.version || null, rulesVersion: game.rulesVersion || RULES_VERSION,
     durationMs: Date.now() - game.startedAt, firstPlayer: game.firstPlayer, targets: game.players.map((player) => player.target),
-    inputs: game.players.map((player) => ({ ...player.inputValues })), initialHands: game.players.map((player) => player.initialHand.map((card) => card.type)),
+    inputLayout: game.players.map((player) => [...player.assignedInputs]), inputs: game.players.map((player) => ({ ...player.inputValues })),
+    initialHands: game.players.map((player) => player.initialHand.map((card) => card.type)),
     moves: game.moves.map((move) => ({ ...move })), result: game.result ? { ...game.result, signals: { ...game.result.signals } } : null,
   }
 }
