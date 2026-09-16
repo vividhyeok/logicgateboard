@@ -22,6 +22,21 @@ function syncHoldingState() {
   document.body.classList.toggle('tabletop-holding', Boolean(holding))
 }
 
+function syncResultActions() {
+  const actions = document.querySelector('.result-actions')
+  if (!actions) return
+
+  const buttons = [...actions.querySelectorAll('button')]
+  const sameReplay = buttons.find((button) => button.textContent?.trim() === '같은 판 다시')
+  if (sameReplay) sameReplay.remove()
+
+  const newGame = [...actions.querySelectorAll('button')].find((button) => button.textContent?.trim() === '새 판')
+  if (newGame) {
+    newGame.textContent = '다시 하기'
+    newGame.setAttribute('aria-label', '새로운 카드로 다시 하기')
+  }
+}
+
 function primeExistingPlacements() {
   document.querySelectorAll('.card-slot.filled').forEach((slot) => seenFilled.add(slot))
 }
@@ -43,10 +58,12 @@ function initTabletopEffects() {
   primeExistingPlacements()
   syncTurnState()
   syncHoldingState()
+  syncResultActions()
 
   const observer = new MutationObserver(() => {
     syncTurnState()
     syncHoldingState()
+    syncResultActions()
     detectNewPlacements()
   })
   observer.observe(document.getElementById('root') || document.body, {
