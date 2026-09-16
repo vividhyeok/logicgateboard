@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { MAPS } from '../src/maps.js'
-import { createGame, chooseTarget, setPlayerInputs, legalSlotIds, allLegalActions, playMove, resolveGame, chooseCpuMove, topologicalOrder } from '../src/game.js'
+import { HAND_SIZE, createGame, chooseTarget, setPlayerInputs, legalSlotIds, allLegalActions, playMove, resolveGame, chooseCpuMove, topologicalOrder } from '../src/game.js'
 import { snapshotForPlayer } from '../src/snapshot.js'
 function ready(map, seed=123) {
   let g=createGame(map.id,'cpu',seed)
@@ -9,6 +9,24 @@ function ready(map, seed=123) {
   for(const p of g.players) g=setPlayerInputs(g,p.id,Object.fromEntries(p.assignedInputs.map(id=>[id,p.id])))
   return g
 }
+test('gate deck is created only after both players lock their 0/1 inputs',()=>{
+  const map=MAPS[0]
+  let g=createGame(map.id,'local',123)
+  assert.equal(g.deck.length,0)
+  assert.deepEqual(g.players.map(p=>p.hand.length),[0,0])
+  g=chooseTarget(g,g.targetChooser,0)
+  const first=g.players[0]
+  g=setPlayerInputs(g,0,Object.fromEntries(first.assignedInputs.map(id=>[id,0])))
+  assert.equal(g.phase,'input_selection')
+  assert.equal(g.deck.length,0)
+  assert.deepEqual(g.players.map(p=>p.hand.length),[0,0])
+  const second=g.players[1]
+  g=setPlayerInputs(g,1,Object.fromEntries(second.assignedInputs.map(id=>[id,1])))
+  const handSize=HAND_SIZE[map.level]
+  assert.equal(g.phase,'play')
+  assert.deepEqual(g.players.map(p=>p.hand.length),[handSize,handSize])
+  assert.equal(g.deck.length,20-handSize*2)
+})
 test('every map permits rear gates and both switches on the first turn',()=>{
   for(const map of MAPS){
     const g=ready(map), p=g.players[g.currentPlayer]
