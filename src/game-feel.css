@@ -1,0 +1,145 @@
+/* Immersive card-game feedback layered on top of the existing board styles. */
+
+.player-hand.current-hand {
+  position: relative;
+  overflow: visible;
+}
+
+.logic-card:not(.compact),
+.input-choice-card {
+  touch-action: none;
+  cursor: grab;
+}
+
+.logic-card:not(.compact):active,
+.input-choice-card:active {
+  cursor: grabbing;
+}
+
+.hand-deal-deck {
+  position: absolute;
+  left: 50%;
+  top: -154px;
+  z-index: 70;
+  transform: translateX(-50%);
+  pointer-events: none;
+  filter: drop-shadow(0 16px 22px rgba(15, 18, 28, .24));
+}
+
+.hand-deal-deck .deck-stack {
+  transform-origin: 50% 100%;
+  animation: dealDeckBreathe .76s ease-in-out infinite alternate;
+}
+
+.hand-deal-deck .deck-stack.is-dealing .layer-1 {
+  animation: topCardTwitch .34s ease-in-out infinite alternate;
+}
+
+@keyframes dealDeckBreathe {
+  from { transform: translateY(2px) scale(.88) rotate(-1deg); }
+  to { transform: translateY(-4px) scale(.94) rotate(1deg); }
+}
+
+@keyframes topCardTwitch {
+  from { transform: translate(0, 0) rotate(0deg); }
+  to { transform: translate(3px, -4px) rotate(2deg); }
+}
+
+.input-deal-zone {
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr);
+  gap: 18px;
+  align-items: end;
+  margin-top: 8px;
+}
+
+.input-setup-deck {
+  align-self: center;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  min-height: 126px;
+  padding-top: 12px;
+  pointer-events: none;
+}
+
+.input-setup-deck .deck-stack {
+  transform: scale(.88);
+  transform-origin: center bottom;
+}
+
+.input-setup-deck small {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  color: rgba(38, 42, 54, .56);
+}
+
+.input-deal-zone .input-card-rack {
+  margin-top: 0;
+}
+
+.input-choice-card {
+  position: relative;
+  z-index: 5;
+  will-change: transform;
+}
+
+.input-choice-card-slot.is-selected .input-choice-card {
+  box-shadow: 0 0 0 3px rgba(255,255,255,.85), 0 0 0 6px rgba(71, 89, 255, .42), 0 18px 36px rgba(26, 31, 55, .22);
+}
+
+.input-node[data-input-drop-id] .input-value-card {
+  transition: filter .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+
+.input-node.input-drop-target .input-value-card {
+  filter: brightness(1.05);
+  box-shadow: 0 0 0 4px rgba(255,255,255,.88), 0 0 0 8px rgba(76, 95, 255, .48), 0 16px 38px rgba(38, 44, 86, .24);
+}
+
+.card-slot.legal:not(.filled) {
+  animation: legalSlotPulse 1.15s ease-in-out infinite;
+}
+
+@keyframes legalSlotPulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.09); }
+}
+
+.deal-banner {
+  backdrop-filter: blur(6px);
+}
+
+@media (max-width: 760px) {
+  .input-deal-zone {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .input-setup-deck {
+    min-height: 70px;
+    padding-top: 0;
+  }
+
+  .input-setup-deck .deck-stack {
+    transform: scale(.62);
+  }
+
+  .input-setup-deck small {
+    margin-top: -14px;
+  }
+
+  .hand-deal-deck {
+    top: -112px;
+    transform: translateX(-50%) scale(.78);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hand-deal-deck .deck-stack,
+  .hand-deal-deck .deck-stack.is-dealing .layer-1,
+  .card-slot.legal:not(.filled) {
+    animation: none !important;
+  }
+}
