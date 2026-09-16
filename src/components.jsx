@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
-import { PLAYER_META, getActionForCard, getWildAction, inputOwner, legalSlotIds, visibleInputValue } from './game.js'
-import { wirePath } from './maps.js'
+import { PLAYER_META, currentStage, getActionForCard, getWildAction, inputOwner, legalSlotIds, visibleInputValue } from './game.js'
+import { MAP_BY_ID, wirePath } from './maps.js'
 
 const CARD_META = {
   AND: { className: 'card-and', hint: '둘 다 1' },
@@ -9,6 +9,13 @@ const CARD_META = {
   OR: { className: 'card-or', hint: '하나라도 1' },
   NOR: { className: 'card-nor', hint: 'OR 반전' },
   XOR: { className: 'card-xor', hint: '서로 다름' },
+}
+const GATE_TRUTH = {
+  AND: '00→0 · 01→0 · 10→0 · 11→1',
+  NAND: '00→1 · 01→1 · 10→1 · 11→0',
+  OR: '00→0 · 01→1 · 10→1 · 11→1',
+  NOR: '00→1 · 01→0 · 10→0 · 11→0',
+  XOR: '00→0 · 01→1 · 10→1 · 11→0',
 }
 
 export function GateIcon({ type, className = '' }) {
@@ -51,24 +58,25 @@ export function GateCard({ card, compact = false, selected = false, disabled = f
       animate={{ y: 0, x: 0, scale: 1, rotate: 0, opacity: 1 }}
       transition={dealFromCenter ? { type: 'spring', stiffness: 380, damping: 28, delay: dealDelay } : { type: 'spring', stiffness: 500, damping: 35 }}
       aria-label={`${card.type} 카드`}
+      title={compact ? undefined : GATE_TRUTH[card.type]}
     >
       <span className="card-corner top">{card.type}</span>
       <div className="card-swoosh" />
       <div className="card-core"><GateIcon type={card.type} /><strong>{card.type}</strong>{!compact && <small>{meta.hint}</small>}</div>
       <span className="card-corner bottom">{card.type}</span>
-      {owner !== null && <span className={`card-owner player-${owner + 1}`}>{owner + 1}</span>}
+      {owner !== null && owner >= 0 && <span className={`card-owner player-${owner + 1}`}>{owner + 1}</span>}
     </motion.button>
   )
 }
 
-export function WildCard({ playerId, side = 'NOT', compact = false, selected = false, disabled = false, onSelect, onFlip, onDragEnd, dealFromCenter = false }) {
+export function WildCard({ playerId, side = 'NOT', compact = false, selected = false, disabled = false, onSelect, onFlip, onDragEnd, dealFromCenter = false, layoutId }) {
   const dragEnabled = !compact && !disabled && Boolean(onDragEnd)
   const sideLabel = side === 'NOT' ? 'NOT' : '통과'
   return (
     <div className={`wild-wrap ${compact ? 'compact-wrap' : ''}`}>
       <motion.button
         type="button"
-        layoutId={`wild-p${playerId}`}
+        layoutId={layoutId || `wild-p${playerId}`}
         className={`logic-card wild-card ${compact ? 'compact' : ''} ${selected ? 'selected' : ''}`}
         onClick={disabled ? undefined : onSelect}
         disabled={disabled}
@@ -88,13 +96,13 @@ export function WildCard({ playerId, side = 'NOT', compact = false, selected = f
         <span className="card-corner top">WILD</span>
         <div className="card-core wild-core">
           <motion.div key={side} initial={{ rotateY: 88, opacity: 0.25 }} animate={{ rotateY: 0, opacity: 1 }} transition={{ duration: 0.24 }} className="wild-face">
-            <strong>{sideLabel}</strong>{!compact && <small>{side === 'NOT' ? '신호 반전' : '그대로 통과'}</small>}
+            <strong>{sideLabel}</strong>{!compact && <small>{side === 'NOT' ? '이 경로 반전' : '반대 경로가 NOT'}</small>}
           </motion.div>
         </div>
         <span className="card-corner bottom">WILD</span>
-        <span className={`card-owner player-${playerId + 1}`}>{playerId + 1}</span>
+        {playerId >= 0 && <span className={`card-owner player-${playerId + 1}`}>{playerId + 1}</span>}
       </motion.button>
-      {!compact && !disabled && <button type="button" className="wild-flip-button" onClick={(event) => { event.stopPropagation(); onFlip?.() }}>↻ {side === 'NOT' ? '통과' : '반전'}</button>}
+      {!compact && !disabled && <button type="button" className="wild-flip-button" onClick={(event) => { event.stopPropagation(); onFlip?.() }}>↻ {side === 'NOT' ? '통과 쪽' : 'NOT 쪽'}</button>}
     </div>
   )
 }
@@ -116,12 +124,12 @@ function BoardInputCard({ id, value, owner, reveal, activeSignal }) {
   )
 }
 
-function OutputCard({ value, revealed, activeSignal }) {
+function OutputCard({ value, revealed, activeSignal, gateType }) {
   return (
-    <motion.div className="board-value-card output-value-card" animate={{ rotateY: revealed ? 0 : 180 }} transition={{ duration: 0.36 }} aria-label="최종 결과">
+    <motion.div className="board-value-card output-value-card" animate={{ rotateY: revealed ? 0 : 180 }} transition={{ duration: 0.36 }} aria-label={`최종 결과${gateType ? ` · 고정 ${gateType}` : ''}`}>
       <div className="value-card-inner">
-        <div className="value-card-front"><strong>{revealed ? value : '?'}</strong></div>
-        <div className="value-card-back"><strong>?</strong></div>
+        <div className="value-card-front"><span style={{fontSize:7,fontWeight:800}}>{gateType ? `고정 ${gateType}` : 'OUT'}</span><strong>{revealed ? value : '?'}</strong></div>
+        <div className="value-card-back"><span style={{fontSize:7,fontWeight:800}}>{gateType ? `고정 ${gateType}` : 'OUT'}</span><strong>?</strong></div>
       </div>
       {activeSignal !== undefined && <SignalDot value={activeSignal} />}
     </motion.div>
@@ -133,7 +141,15 @@ export function MapPreview({ map }) {
     {map.edges.map((edge) => <path key={edge.join('-')} d={wirePath(map, edge)} className="preview-wire" />)}
     {map.nodes.map((node) => {
       const isSlot = node.type === 'gate' || node.type === 'wild'
-      return <g key={node.id} transform={`translate(${node.x} ${node.y})`}>{isSlot ? <rect x="-33" y="-47" width="66" height="94" rx="8" className={node.type === 'wild' ? 'preview-slot wild' : 'preview-slot'} /> : <rect x="-24" y="-34" width="48" height="68" rx="7" className={node.type === 'output' ? 'preview-io output' : 'preview-io'} />}</g>
+      return <g key={node.id} transform={`translate(${node.x} ${node.y})`}>
+        {isSlot ? <>
+          <rect x="-33" y="-47" width="66" height="94" rx="8" className={node.type === 'wild' ? 'preview-slot wild' : 'preview-slot'} />
+          <text x="0" y="4" textAnchor="middle" fontSize="17" fontWeight="800" fill="currentColor">{node.stage}</text>
+        </> : <>
+          <rect x="-24" y="-34" width="48" height="68" rx="7" className={node.type === 'output' ? 'preview-io output' : 'preview-io'} />
+          {node.type === 'output' && node.gateType && <text x="0" y="4" textAnchor="middle" fontSize="11" fontWeight="900" fill="currentColor">{node.gateType}</text>}
+        </>}
+      </g>
     })}
   </svg>
 }
@@ -141,6 +157,7 @@ export function MapPreview({ map }) {
 export function GameBoard({ map, game, viewerId, selectedAction, onSlotClick, revealAllInputs = false, solution = null, revealIndex = -1, resolving = false }) {
   const [focusedNode, setFocusedNode] = useState(null)
   const legalSlots = selectedAction ? legalSlotIds(game, selectedAction) : []
+  const activeStage = currentStage(game)
   const revealNodeIndex = solution?.revealOrder ? Object.fromEntries(solution.revealOrder.map((id, index) => [id, index])) : {}
   const nodeRevealed = (nodeId, type) => {
     if (!solution) return false
@@ -191,20 +208,34 @@ export function GameBoard({ map, game, viewerId, selectedAction, onSlotClick, re
 
           if (node.type === 'output') {
             return <div key={node.id} data-node-id={node.id} className={`board-node output-node ${focusedNode === node.id ? 'is-focused' : ''}`} style={style} {...focusProps}>
-              <OutputCard value={solution?.output} revealed={signalVisible} activeSignal={signal} />
+              <OutputCard value={solution?.output} revealed={signalVisible} activeSignal={signal} gateType={node.gateType} />
             </div>
           }
 
           const placement = game.placements?.[node.id]
           const legal = legalSlots.includes(node.id)
-          return <button key={node.id} type="button" data-slot-id={node.id} data-node-id={node.id} className={`board-node card-slot ${node.type === 'wild' ? 'wild-slot' : ''} ${legal ? 'legal' : ''} ${placement ? 'filled' : ''} ${focusedNode === node.id ? 'is-focused' : ''} ${signalVisible ? 'signal-resolved' : ''}`} style={style} onClick={() => legal && onSlotClick(node.id)} disabled={!legal && !placement} {...focusProps}>
-            {!placement ? <div className="slot-print" aria-hidden="true" /> : placement.kind === 'gate' ? <GateCard card={{ id: placement.cardId, type: placement.cardType }} compact owner={placement.playerId} layoutId={`card-${placement.cardId}`} /> : <WildCard playerId={placement.playerId} side={placement.cardType} compact />}
+          const isCurrentStage = (node.stage ?? 1) === activeStage
+          return <button key={node.id} type="button" data-slot-id={node.id} data-node-id={node.id} data-stage={node.stage ?? 1} className={`board-node card-slot ${node.type === 'wild' ? 'wild-slot' : ''} ${legal ? 'legal' : ''} ${placement ? 'filled' : ''} ${isCurrentStage ? 'current-stage-slot' : 'future-stage-slot'} ${focusedNode === node.id ? 'is-focused' : ''} ${signalVisible ? 'signal-resolved' : ''}`} style={style} onClick={() => legal && onSlotClick(node.id)} disabled={!legal && !placement} {...focusProps}>
+            {!placement ? <>
+              <div className="slot-print" aria-hidden="true" />
+              <span aria-hidden="true" style={{position:'absolute',top:-7,right:-7,zIndex:8,minWidth:22,height:22,borderRadius:11,display:'grid',placeItems:'center',font:'800 10px/1 IBM Plex Mono',background:isCurrentStage?'#17191c':'#ded8cd',color:isCurrentStage?'#fff':'#625d55',boxShadow:'0 1px 5px rgba(0,0,0,.18)'}}>{node.stage ?? 1}</span>
+            </> : placement.kind === 'gate' ? <GateCard card={{ id: placement.cardId, type: placement.cardType }} compact owner={placement.playerId} layoutId={`card-${placement.cardId}`} /> : <WildCard playerId={placement.playerId} side={placement.cardType} compact layoutId={placement.auto ? `wild-auto-${node.id}-${placement.turn}` : `wild-p${placement.playerId}`} />}
             {signal !== undefined && <SignalDot value={signal} />}
           </button>
         })}
       </div>
     </motion.section>
   )
+}
+
+function GateReference() {
+  return <details style={{fontSize:11,opacity:.88,maxWidth:420}}>
+    <summary style={{cursor:'pointer',fontWeight:800}}>게이트 진리표</summary>
+    <div style={{display:'grid',gap:3,marginTop:6,fontFamily:'IBM Plex Mono, monospace'}}>
+      {Object.entries(GATE_TRUTH).map(([gate, truth]) => <span key={gate}><b>{gate}</b> · {truth}</span>)}
+      <span><b>WILD</b> · 선택한 경로가 NOT이면 반대 경로는 자동 통과</span>
+    </div>
+  </details>
 }
 
 export function PlayerHand({ player, playerId, label, isCurrent, selectedAction, wildSide, onSelectAction, onFlipWild, onDragAction, dealing, opponent = false }) {
@@ -221,6 +252,7 @@ export function PlayerHand({ player, playerId, label, isCurrent, selectedAction,
 
   return <section className={`player-hand current-hand ${isCurrent ? 'is-current' : ''}`}>
     <div className="hand-label"><span className={`player-pip player-${playerId + 1}`} /><strong>{label || PLAYER_META[playerId].name}</strong><small>{isCurrent ? '내 차례' : `${cards.length}장`}</small></div>
+    <GateReference />
     <div className="hand-fan">
       {cards.map((card, index) => {
         const selected = selectedAction?.kind === 'gate' && selectedAction.cardId === card.id
@@ -244,7 +276,7 @@ export function TurnCurtain({ playerId, onReady }) {
 export function CoinOverlay({ winnerId, viewerId = null, onDone }) {
   const firstPlayerId = 1 - winnerId
   const name = (id) => viewerId === null ? `플레이어 ${id + 1}` : (id === viewerId ? '당신' : '상대')
-  return <motion.div className="coin-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className={`coin player-${winnerId + 1}`} initial={{ rotateY: 0, y: -80, scale: 0.5 }} animate={{ rotateY: 1080, y: 0, scale: 1 }} transition={{ duration: 1.05, ease: [0.2, 0.7, 0.2, 1] }}>{viewerId === null ? winnerId + 1 : (winnerId === viewerId ? '나' : '상대')}</motion.div><motion.div className="coin-copy" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.72 }}><span>순서 정하기</span><strong>{name(winnerId)}이 목표를 고릅니다.</strong><small>{name(firstPlayerId)}이 먼저 카드를 놓습니다.</small><button type="button" onClick={onDone}>확인</button></motion.div></motion.div>
+  return <motion.div className="coin-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><motion.div className={`coin player-${winnerId + 1}`} initial={{ rotateY: 0, y: -80, scale: 0.5 }} animate={{ rotateY: 1080, y: 0, scale: 1 }} transition={{ duration: 1.05, ease: [0.2, 0.7, 0.2, 1] }}>{viewerId === null ? winnerId + 1 : (winnerId === viewerId ? '나' : '상대')}</motion.div><motion.div className="coin-copy" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.72 }}><span>순서 정하기</span><strong>{name(winnerId)}이 목표를 고릅니다.</strong><small>{name(firstPlayerId)}이 1단계를 먼저 시작합니다.</small><button type="button" onClick={onDone}>확인</button></motion.div></motion.div>
 }
 
 export function TargetChoice({ playerId, personal = false, onChoose }) {
@@ -253,10 +285,20 @@ export function TargetChoice({ playerId, personal = false, onChoose }) {
 
 export function InputChoice({ game, playerId, personal = false, draft, onChange, onSubmit }) {
   const assigned = game.players[playerId].assignedInputs
+  const opponentAssigned = game.players[1 - playerId].assignedInputs
   const complete = assigned.every((id) => draft[id] !== undefined)
+  const map = MAP_BY_ID[game.mapId]
   return <motion.div className={`phase-panel input-phase player-panel-${playerId + 1}`} initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}>
     <span className="eyebrow">비밀 입력</span>
     <h2>{personal ? '내 입력을 정하세요.' : `플레이어 ${playerId + 1}의 입력을 정하세요.`}</h2>
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:14,alignItems:'center',margin:'10px 0 14px'}}>
+      <div style={{minHeight:120,border:'1px solid rgba(30,28,25,.15)',borderRadius:12,padding:8,background:'rgba(255,255,255,.45)'}}><MapPreview map={map} /></div>
+      <div style={{display:'grid',gap:7,fontSize:12,textAlign:'left'}}>
+        <strong>내 입력 위치 · {assigned.join(' · ')}</strong>
+        <span>상대 입력 위치 · {opponentAssigned.join(' · ')}</span>
+        <span style={{opacity:.72}}>위치는 공개됩니다. 0/1 값만 서로 비밀입니다.</span>
+      </div>
+    </div>
     <div className="input-choice-grid">{assigned.map((id) => <div key={id} className="input-choice-row"><strong>{id}</strong><div>{[0, 1].map((value) => <button key={value} className={draft[id] === value ? 'active' : ''} onClick={() => onChange(id, value)}>{value}</button>)}</div></div>)}</div>
     <button className="primary-button" type="button" disabled={!complete} onClick={onSubmit}>확정</button>
   </motion.div>
