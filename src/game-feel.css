@@ -111,6 +111,291 @@
   backdrop-filter: blur(6px);
 }
 
+/* -------------------------------------------------------------------------- */
+/* TABLETOP PASS: make the UI behave like a physical game surface, not a form. */
+/* -------------------------------------------------------------------------- */
+
+.game-page,
+.online-game-page {
+  isolation: isolate;
+}
+
+.game-page::before,
+.online-game-page::before {
+  content: '';
+  position: absolute;
+  inset: 48px 2px 4px;
+  z-index: -2;
+  pointer-events: none;
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 22% 14%, rgba(255,255,255,.035), transparent 22%),
+    radial-gradient(circle at 80% 74%, rgba(255,211,66,.035), transparent 26%),
+    repeating-linear-gradient(18deg, rgba(255,255,255,.008) 0 1px, transparent 1px 4px),
+    linear-gradient(145deg, #17130f 0%, #110f0c 54%, #17130f 100%);
+  border: 1px solid rgba(255,255,255,.035);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.025), inset 0 0 90px rgba(0,0,0,.28);
+}
+
+.table-layout,
+.online-table-layout {
+  position: relative;
+  perspective: 1400px;
+}
+
+.board-zone {
+  position: relative;
+  z-index: 5;
+}
+
+.board-frame {
+  position: relative;
+  border-radius: 20px;
+  box-shadow:
+    0 2px 0 rgba(255,255,255,.5) inset,
+    0 -2px 0 rgba(52,38,24,.16) inset,
+    0 20px 38px rgba(0,0,0,.34),
+    0 5px 10px rgba(0,0,0,.24);
+  transform-style: preserve-3d;
+}
+
+.board-frame::after {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  z-index: 30;
+  pointer-events: none;
+  border-radius: 15px;
+  border: 1px solid rgba(66,49,30,.16);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.35);
+}
+
+.board-canvas {
+  border-radius: 16px;
+  background-image:
+    radial-gradient(circle at 14% 18%, rgba(255,255,255,.28), transparent 22%),
+    repeating-linear-gradient(0deg, rgba(55,43,29,.018) 0 1px, transparent 1px 5px);
+}
+
+/* The status bar becomes a physical turn marker instead of plain chrome. */
+.focus-status {
+  position: relative;
+  overflow: visible;
+  transition: border-color .22s ease, box-shadow .22s ease, transform .22s ease, opacity .22s ease;
+}
+
+.focus-status .phase-status {
+  position: relative;
+}
+
+.focus-status .phase-status::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -10px;
+  width: 17px;
+  height: 17px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: #8e877c;
+  border: 2px solid #f4ede1;
+  box-shadow: 0 3px 8px rgba(0,0,0,.38), inset 0 -2px 0 rgba(0,0,0,.18);
+  transition: background .2s ease, box-shadow .2s ease, transform .2s ease;
+}
+
+body.tabletop-my-turn .focus-status .phase-status::before {
+  background: var(--yellow);
+  box-shadow: 0 0 0 4px rgba(255,211,66,.11), 0 4px 10px rgba(0,0,0,.42), inset 0 -2px 0 rgba(120,82,0,.22);
+  animation: turnTokenPulse 1.5s ease-in-out infinite;
+}
+
+body.tabletop-opponent-turn .focus-status .phase-status::before {
+  background: var(--orange);
+}
+
+@keyframes turnTokenPulse {
+  0%, 100% { transform: translateX(-50%) scale(1); }
+  50% { transform: translateX(-50%) scale(1.12); }
+}
+
+/* Player focus follows the turn, like people leaning into / away from the table. */
+.player-hand,
+.current-area,
+.opponent-area {
+  transition: opacity .24s ease, filter .24s ease;
+}
+
+body.tabletop-my-turn .current-hand.is-current {
+  filter: drop-shadow(0 12px 20px rgba(0,0,0,.24));
+}
+
+body.tabletop-my-turn .opponent-area {
+  opacity: .68;
+  filter: saturate(.78) brightness(.9);
+}
+
+body.tabletop-opponent-turn .current-area {
+  opacity: .77;
+  filter: saturate(.82) brightness(.94);
+}
+
+body.tabletop-opponent-turn .opponent-hand.is-current {
+  filter: drop-shadow(0 10px 18px rgba(0,0,0,.24));
+}
+
+/* Cards: lift, pick-up, and a stronger selected state without changing layout. */
+.logic-card:not(.compact) {
+  box-shadow: 0 9px 16px rgba(0,0,0,.25), 0 2px 3px rgba(0,0,0,.18);
+  transition: box-shadow .17s ease, filter .17s ease, outline-color .17s ease;
+  transform-origin: 50% 86%;
+}
+
+.logic-card:not(.compact)::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  pointer-events: none;
+  border-radius: inherit;
+  border: 1px solid rgba(255,255,255,.24);
+  opacity: .7;
+}
+
+.logic-card:not(.compact).selected {
+  z-index: 95;
+  outline: 3px solid rgba(255,211,66,.92);
+  outline-offset: 3px;
+  filter: brightness(1.055) saturate(1.05);
+  box-shadow: 0 24px 38px rgba(0,0,0,.36), 0 7px 12px rgba(0,0,0,.23), 0 0 0 5px rgba(255,211,66,.10);
+}
+
+body.tabletop-grabbing .logic-card:not(.compact).selected,
+body.tabletop-grabbing .input-choice-card {
+  filter: brightness(1.07) saturate(1.06);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .current-hand.is-current .logic-card:not(.compact):not(.selected):hover {
+    filter: brightness(1.045) saturate(1.035);
+    box-shadow: 0 18px 28px rgba(0,0,0,.32), 0 5px 8px rgba(0,0,0,.2);
+  }
+
+  .card-slot.legal:not(.filled):hover {
+    filter: brightness(1.12) saturate(1.06);
+  }
+}
+
+/* Legal spaces read as recessed board wells. Holding a card intensifies only them. */
+.card-slot:not(.filled) {
+  transition: filter .16s ease, box-shadow .16s ease, border-color .16s ease;
+}
+
+body.tabletop-holding .card-slot:not(.legal):not(.filled) {
+  opacity: .66;
+  filter: saturate(.68) brightness(.94);
+}
+
+body.tabletop-holding .card-slot.legal:not(.filled) {
+  opacity: 1;
+  box-shadow:
+    inset 0 2px 4px rgba(0,0,0,.20),
+    0 0 0 2px rgba(255,255,255,.58),
+    0 0 0 5px rgba(255,211,66,.28),
+    0 7px 16px rgba(0,0,0,.12);
+}
+
+body.tabletop-holding .card-slot.legal:not(.filled) .slot-kind {
+  font-weight: 900;
+}
+
+/* Physical 'thunk' when a placement appears. */
+.card-slot.tabletop-landed {
+  z-index: 28;
+}
+
+.card-slot.tabletop-landed .logic-card.compact,
+.card-slot.tabletop-landed .wild-card.compact {
+  animation: cardTableThump .54s cubic-bezier(.18,.86,.28,1.12);
+  transform-origin: center;
+}
+
+.card-slot.tabletop-landed::before {
+  content: '';
+  position: absolute;
+  inset: -9px;
+  z-index: -1;
+  border-radius: 14px;
+  pointer-events: none;
+  animation: placementRing .58s ease-out both;
+  border: 2px solid rgba(255,211,66,.78);
+}
+
+@keyframes cardTableThump {
+  0% { filter: brightness(1.16); transform: translateY(-18px) scale(1.075) rotate(-1.6deg); }
+  52% { transform: translateY(2px) scale(.982) rotate(.5deg); }
+  76% { transform: translateY(-1px) scale(1.012) rotate(0deg); }
+  100% { filter: brightness(1); transform: translateY(0) scale(1) rotate(0deg); }
+}
+
+@keyframes placementRing {
+  0% { opacity: .9; transform: scale(.82); }
+  100% { opacity: 0; transform: scale(1.18); }
+}
+
+/* Keep hints close to the hand, like a small table reminder rather than tutorial copy. */
+.placement-hint {
+  border-radius: 999px;
+  box-shadow: 0 9px 20px rgba(0,0,0,.24);
+  backdrop-filter: blur(10px);
+}
+
+.placement-hint button {
+  min-width: 44px;
+}
+
+/* Deal piles read like actual stacks resting above the hand. */
+.deck-stack {
+  filter: drop-shadow(0 9px 10px rgba(0,0,0,.24));
+}
+
+.deck-stack > span {
+  min-width: 24px;
+  min-height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  box-shadow: 0 3px 8px rgba(0,0,0,.28);
+}
+
+/* Input setup should feel like receiving components before play begins. */
+.input-setup-deck {
+  border-radius: 16px;
+  background: rgba(21,18,15,.035);
+}
+
+.input-choice-card {
+  box-shadow: 0 10px 17px rgba(0,0,0,.18);
+  transition: box-shadow .16s ease, filter .16s ease;
+}
+
+.input-choice-card-slot.is-selected .input-choice-card {
+  filter: brightness(1.04);
+}
+
+/* Subtle table vignette when a card is actively being held: focus on board + hand. */
+body.tabletop-holding .game-topbar,
+body.tabletop-holding .online-game-topbar {
+  opacity: .72;
+  transition: opacity .16s ease;
+}
+
+body.tabletop-holding .board-frame {
+  box-shadow:
+    0 2px 0 rgba(255,255,255,.5) inset,
+    0 -2px 0 rgba(52,38,24,.16) inset,
+    0 24px 46px rgba(0,0,0,.38),
+    0 0 0 1px rgba(255,211,66,.08);
+}
+
 @media (max-width: 760px) {
   .input-deal-zone {
     grid-template-columns: 1fr;
@@ -134,12 +419,38 @@
     top: -112px;
     transform: translateX(-50%) scale(.78);
   }
+
+  .game-page::before,
+  .online-game-page::before {
+    inset: 44px 0 0;
+    border-radius: 18px;
+  }
+
+  .focus-status .phase-status::before {
+    width: 14px;
+    height: 14px;
+    top: -8px;
+  }
+
+  .logic-card:not(.compact).selected {
+    outline-width: 2px;
+    outline-offset: 2px;
+    box-shadow: 0 17px 25px rgba(0,0,0,.34), 0 0 0 4px rgba(255,211,66,.09);
+  }
+
+  body.tabletop-holding .card-slot.legal:not(.filled) {
+    box-shadow: inset 0 2px 4px rgba(0,0,0,.18), 0 0 0 4px rgba(255,211,66,.28);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .hand-deal-deck .deck-stack,
   .hand-deal-deck .deck-stack.is-dealing .layer-1,
-  .card-slot.legal:not(.filled) {
+  .card-slot.legal:not(.filled),
+  body.tabletop-my-turn .focus-status .phase-status::before,
+  .card-slot.tabletop-landed .logic-card.compact,
+  .card-slot.tabletop-landed .wild-card.compact,
+  .card-slot.tabletop-landed::before {
     animation: none !important;
   }
 }
