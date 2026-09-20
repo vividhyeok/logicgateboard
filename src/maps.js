@@ -1,98 +1,87 @@
 export const MAPS = [
   {
-    id: 'level1_map1', level: 1, code: 'L1 · 01', name: '교차 합류형', version: 'staged-v1',
-    description: '두 입력을 나란히 읽고, 한 경로를 한 번 더 가공한 뒤 고정 XOR에서 합칩니다.',
+    id: 'level1_map1', level: 1, code: 'L1 · 01', name: '끝자리 쟁탈형', version: 'strategy-v3',
+    description: '두 갈래를 만든 뒤 WILD로 한쪽만 뒤집고, 마지막 게이트에서 승부합니다.',
     inputGroups: [['A'], ['B']],
     nodes: [
-      { id: 'A', type: 'input', x: 65, y: 145 }, { id: 'B', type: 'input', x: 65, y: 375 },
-      { id: 'G1', type: 'gate', stage: 1, x: 270, y: 135 }, { id: 'G2', type: 'gate', stage: 1, x: 270, y: 385 },
-      { id: 'G3', type: 'gate', stage: 2, x: 500, y: 135 },
-      { id: 'W1', type: 'wild', stage: 2, pair: 'W', x: 690, y: 135 }, { id: 'W2', type: 'wild', stage: 2, pair: 'W', x: 690, y: 385 },
-      { id: 'OUT', type: 'output', gateType: 'XOR', x: 910, y: 260 },
+      { id: 'A', type: 'input', x: 65, y: 140 }, { id: 'B', type: 'input', x: 65, y: 380 },
+      { id: 'G1', type: 'gate', stage: 1, x: 270, y: 140 }, { id: 'G2', type: 'gate', stage: 1, x: 270, y: 380 },
+      { id: 'W1', type: 'wild', stage: 2, pair: 'W', x: 485, y: 140 }, { id: 'W2', type: 'wild', stage: 2, pair: 'W', x: 485, y: 380 },
+      { id: 'G3', type: 'gate', stage: 3, x: 710, y: 260 },
+      { id: 'OUT', type: 'output', x: 920, y: 260 },
     ],
-    edges: [['A','G1'],['B','G1'],['A','G2'],['B','G2'],['G1','G3'],['A','G3'],['G3','W1'],['G2','W2'],['W1','OUT'],['W2','OUT']],
+    edges: [['A','G1'],['B','G1'],['A','G2'],['B','G2'],['G1','W1'],['G2','W2'],['W1','G3'],['W2','G3'],['G3','OUT']],
   },
   {
-    id: 'level1_map2', level: 1, code: 'L1 · 02', name: '비대칭 재사용형', version: 'staged-v1',
-    description: '한 입력이 중간 단계에서 다시 등장해, 앞선 카드 선택을 다시 해석하게 만듭니다.',
+    id: 'level1_map2', level: 1, code: 'L1 · 02', name: '교차 반전형', version: 'strategy-v3',
+    description: '비밀 입력 바로 앞의 WILD 때문에 같은 게이트도 놓인 위치와 타이밍에 따라 의미가 달라집니다.',
     inputGroups: [['A'], ['B']],
     nodes: [
-      { id: 'A', type: 'input', x: 65, y: 135 }, { id: 'B', type: 'input', x: 65, y: 385 },
-      { id: 'G1', type: 'gate', stage: 1, x: 255, y: 135 }, { id: 'G2', type: 'gate', stage: 1, x: 255, y: 385 },
-      { id: 'G3', type: 'gate', stage: 2, x: 500, y: 245 },
-      { id: 'W1', type: 'wild', stage: 2, pair: 'W', x: 690, y: 140 }, { id: 'W2', type: 'wild', stage: 2, pair: 'W', x: 690, y: 380 },
-      { id: 'OUT', type: 'output', gateType: 'XOR', x: 910, y: 260 },
+      { id: 'A', type: 'input', x: 65, y: 140 }, { id: 'B', type: 'input', x: 65, y: 380 },
+      { id: 'W1', type: 'wild', stage: 1, pair: 'W', x: 260, y: 140 }, { id: 'W2', type: 'wild', stage: 1, pair: 'W', x: 260, y: 380 },
+      { id: 'G1', type: 'gate', stage: 2, x: 500, y: 155 }, { id: 'G2', type: 'gate', stage: 2, x: 500, y: 365 },
+      { id: 'G3', type: 'gate', stage: 3, x: 735, y: 260 },
+      { id: 'OUT', type: 'output', x: 930, y: 260 },
     ],
-    edges: [['A','G1'],['B','G1'],['A','G2'],['B','G2'],['G1','G3'],['B','G3'],['G2','W1'],['G3','W2'],['W1','OUT'],['W2','OUT']],
+    edges: [['A','W1'],['B','W2'],['W1','G1'],['B','G1'],['A','G2'],['W2','G2'],['G1','G3'],['G2','G3'],['G3','OUT']],
   },
   {
-    id: 'level1_map3', level: 1, code: 'L1 · 03', name: '분기 역추론형', version: 'staged-v1',
-    description: '두 초반 결과를 다시 합치고 원본 입력 하나를 보존해, 블러핑과 역추론 여지를 남깁니다.',
+    id: 'level1_map3', level: 1, code: 'L1 · 03', name: '쌍두 결승형', version: 'strategy-v3',
+    description: '마지막 한 칸 대신 두 후반 게이트가 맞붙습니다. XOR는 이 맵에서만 결승 규칙으로 작동합니다.',
     inputGroups: [['A'], ['B']],
     nodes: [
-      { id: 'A', type: 'input', x: 65, y: 135 }, { id: 'B', type: 'input', x: 65, y: 385 },
-      { id: 'G1', type: 'gate', stage: 1, x: 255, y: 135 }, { id: 'G2', type: 'gate', stage: 1, x: 255, y: 385 },
-      { id: 'G3', type: 'gate', stage: 2, x: 500, y: 260 },
-      { id: 'W1', type: 'wild', stage: 2, pair: 'W', x: 700, y: 155 }, { id: 'W2', type: 'wild', stage: 2, pair: 'W', x: 700, y: 365 },
-      { id: 'OUT', type: 'output', gateType: 'XOR', x: 915, y: 260 },
+      { id: 'A', type: 'input', x: 65, y: 140 }, { id: 'B', type: 'input', x: 65, y: 380 },
+      { id: 'G1', type: 'gate', stage: 1, x: 280, y: 260 },
+      { id: 'W1', type: 'wild', stage: 2, pair: 'W', x: 485, y: 145 }, { id: 'W2', type: 'wild', stage: 2, pair: 'W', x: 485, y: 375 },
+      { id: 'G2', type: 'gate', stage: 3, x: 705, y: 145 }, { id: 'G3', type: 'gate', stage: 3, x: 705, y: 375 },
+      { id: 'OUT', type: 'output', gateType: 'XOR', x: 925, y: 260 },
     ],
-    edges: [['A','G1'],['B','G1'],['A','G2'],['B','G2'],['G1','G3'],['G2','G3'],['G3','W1'],['A','W2'],['W1','OUT'],['W2','OUT']],
+    edges: [['A','G1'],['B','G1'],['G1','W1'],['G1','W2'],['W1','G2'],['A','G2'],['W2','G3'],['B','G3'],['G2','OUT'],['G3','OUT']],
   },
   {
-    id: 'level2_map1', level: 2, code: 'L2 · 01', name: '교차 재사용형', version: 'staged-v1',
-    description: '두 입력쌍을 시작으로 중간 신호를 교차 재사용하고, 두 후반 경로를 고정 XOR에서 합칩니다.',
-    inputGroups: [['A','C'], ['B','D']],
-    nodes: [
-      { id: 'A', type: 'input', x: 35, y: 55 }, { id: 'B', type: 'input', x: 35, y: 175 }, { id: 'C', type: 'input', x: 35, y: 335 }, { id: 'D', type: 'input', x: 35, y: 455 },
-      { id: 'G1', type: 'gate', stage: 1, x: 220, y: 115 }, { id: 'G2', type: 'gate', stage: 1, x: 220, y: 395 },
-      { id: 'G3', type: 'gate', stage: 2, x: 420, y: 210 },
-      { id: 'W1', type: 'wild', stage: 2, pair: 'W', x: 555, y: 155 }, { id: 'W2', type: 'wild', stage: 2, pair: 'W', x: 555, y: 365 },
-      { id: 'G4', type: 'gate', stage: 3, x: 745, y: 155 }, { id: 'G5', type: 'gate', stage: 3, x: 745, y: 365 },
-      { id: 'OUT', type: 'output', gateType: 'XOR', x: 935, y: 260 },
-    ],
-    edges: [['A','G1'],['B','G1'],['C','G2'],['D','G2'],['G1','G3'],['C','G3'],['G3','W1'],['G2','W2'],['W1','G4'],['B','G4'],['W2','G5'],['A','G5'],['G4','OUT'],['G5','OUT']],
-  },
-  {
-    id: 'level2_map2', level: 2, code: 'L2 · 02', name: '긴길·짧은길형', version: 'staged-v1',
-    description: '한쪽은 긴 가공 경로, 다른 쪽은 원본 신호가 남는 짧은 경로라 상대의 의도를 다르게 읽어야 합니다.',
+    id: 'level2_map1', level: 2, code: 'L2 · 01', name: '중앙 허브형', version: 'strategy-v3',
+    description: '서로의 입력을 섞은 두 신호가 중앙에서 합쳐졌다가 다시 갈라져, 한 수의 의미가 여러 길에 남습니다.',
     inputGroups: [['A','C'], ['B','D']],
     nodes: [
       { id: 'A', type: 'input', x: 35, y: 55 }, { id: 'B', type: 'input', x: 35, y: 175 }, { id: 'C', type: 'input', x: 35, y: 335 }, { id: 'D', type: 'input', x: 35, y: 455 },
       { id: 'G1', type: 'gate', stage: 1, x: 215, y: 115 }, { id: 'G2', type: 'gate', stage: 1, x: 215, y: 395 },
-      { id: 'G3', type: 'gate', stage: 2, x: 420, y: 205 },
-      { id: 'W1', type: 'wild', stage: 2, pair: 'W', x: 555, y: 155 }, { id: 'W2', type: 'wild', stage: 2, pair: 'W', x: 555, y: 365 },
-      { id: 'G4', type: 'gate', stage: 3, x: 745, y: 155 }, { id: 'G5', type: 'gate', stage: 3, x: 745, y: 365 },
-      { id: 'OUT', type: 'output', gateType: 'XOR', x: 935, y: 260 },
+      { id: 'G3', type: 'gate', stage: 2, x: 420, y: 260 },
+      { id: 'W1', type: 'wild', stage: 3, pair: 'W', x: 590, y: 145 }, { id: 'W2', type: 'wild', stage: 3, pair: 'W', x: 590, y: 375 },
+      { id: 'G4', type: 'gate', stage: 4, x: 770, y: 145 }, { id: 'G5', type: 'gate', stage: 4, x: 770, y: 375 },
+      { id: 'OUT', type: 'output', gateType: 'XOR', x: 945, y: 260 },
     ],
-    edges: [['A','G1'],['B','G1'],['C','G2'],['D','G2'],['G1','G3'],['D','G3'],['G3','W1'],['A','W2'],['W1','G4'],['G2','G4'],['W2','G5'],['C','G5'],['G4','OUT'],['G5','OUT']],
+    edges: [['A','G1'],['B','G1'],['C','G2'],['D','G2'],['G1','G3'],['G2','G3'],['G3','W1'],['G3','W2'],['W1','G4'],['C','G4'],['W2','G5'],['A','G5'],['G4','OUT'],['G5','OUT']],
   },
   {
-    id: 'level2_map3', level: 2, code: 'L2 · 03', name: '사다리 추론형', version: 'staged-v1',
-    description: '엇갈린 입력쌍을 가공하고 중간에서 다시 연결해, 여러 턴의 행동을 함께 봐야 입력을 좁힐 수 있습니다.',
+    id: 'level2_map2', level: 2, code: 'L2 · 02', name: '긴길·지름길형', version: 'strategy-v3',
+    description: '한쪽은 여러 번 가공되고 다른 쪽은 비밀 입력이 후반까지 바로 살아남아, 어느 길을 믿을지 계속 바뀝니다.',
     inputGroups: [['A','C'], ['B','D']],
     nodes: [
       { id: 'A', type: 'input', x: 35, y: 55 }, { id: 'B', type: 'input', x: 35, y: 175 }, { id: 'C', type: 'input', x: 35, y: 335 }, { id: 'D', type: 'input', x: 35, y: 455 },
-      { id: 'G1', type: 'gate', stage: 1, x: 215, y: 135 }, { id: 'G2', type: 'gate', stage: 1, x: 215, y: 385 },
-      { id: 'G3', type: 'gate', stage: 2, x: 415, y: 255 },
-      { id: 'W1', type: 'wild', stage: 2, pair: 'W', x: 555, y: 155 }, { id: 'W2', type: 'wild', stage: 2, pair: 'W', x: 555, y: 365 },
-      { id: 'G4', type: 'gate', stage: 3, x: 745, y: 155 }, { id: 'G5', type: 'gate', stage: 3, x: 745, y: 365 },
-      { id: 'OUT', type: 'output', gateType: 'XOR', x: 935, y: 260 },
+      { id: 'G1', type: 'gate', stage: 1, x: 205, y: 110 }, { id: 'G2', type: 'gate', stage: 1, x: 205, y: 400 },
+      { id: 'G3', type: 'gate', stage: 2, x: 395, y: 180 },
+      { id: 'W1', type: 'wild', stage: 3, pair: 'W', x: 555, y: 155 }, { id: 'W2', type: 'wild', stage: 3, pair: 'W', x: 555, y: 385 },
+      { id: 'G4', type: 'gate', stage: 4, x: 720, y: 170 },
+      { id: 'G5', type: 'gate', stage: 5, x: 835, y: 300 },
+      { id: 'OUT', type: 'output', x: 955, y: 300 },
     ],
-    edges: [['A','G1'],['C','G1'],['B','G2'],['D','G2'],['G1','G3'],['B','G3'],['G2','W1'],['G3','W2'],['W1','G4'],['A','G4'],['W2','G5'],['D','G5'],['G4','OUT'],['G5','OUT']],
+    edges: [['A','G1'],['B','G1'],['C','G2'],['D','G2'],['G1','G3'],['D','G3'],['G3','W1'],['C','W2'],['W1','G4'],['G2','G4'],['G4','G5'],['W2','G5'],['G5','OUT']],
+  },
+  {
+    id: 'level2_map3', level: 2, code: 'L2 · 03', name: '맞대결 분기형', version: 'strategy-v3',
+    description: '각자의 두 입력이 한 가지에서 먼저 묶이고, 원본 입력 하나씩이 다시 끼어들어 블러핑과 역추론이 오래 남습니다.',
+    inputGroups: [['A','C'], ['B','D']],
+    nodes: [
+      { id: 'A', type: 'input', x: 35, y: 55 }, { id: 'C', type: 'input', x: 35, y: 175 }, { id: 'B', type: 'input', x: 35, y: 335 }, { id: 'D', type: 'input', x: 35, y: 455 },
+      { id: 'G1', type: 'gate', stage: 1, x: 215, y: 115 }, { id: 'G2', type: 'gate', stage: 1, x: 215, y: 395 },
+      { id: 'W1', type: 'wild', stage: 2, pair: 'W', x: 425, y: 165 }, { id: 'W2', type: 'wild', stage: 2, pair: 'W', x: 425, y: 355 },
+      { id: 'G3', type: 'gate', stage: 3, x: 635, y: 155 }, { id: 'G4', type: 'gate', stage: 3, x: 635, y: 365 },
+      { id: 'G5', type: 'gate', stage: 4, x: 830, y: 260 },
+      { id: 'OUT', type: 'output', x: 955, y: 260 },
+    ],
+    edges: [['A','G1'],['C','G1'],['B','G2'],['D','G2'],['A','W1'],['D','W2'],['G1','G3'],['W1','G3'],['G2','G4'],['W2','G4'],['G3','G5'],['G4','G5'],['G5','OUT']],
   },
 ]
-
-// The paired switch is upstream of a playable gate, never a final XOR flip.
-// No node has a placement-order restriction; stage remains layout metadata only.
-for (const map of MAPS) {
-  map.version = 'free-placement-v2'
-  if (map.level !== 1) continue
-  const positions = { A: [65, 115], B: [65, 405], G1: [265, 135], G2: [265, 365], W1: [460, 135], W2: [460, 365], G3: [675, 250], OUT: [920, 260] }
-  map.nodes.forEach(node => { [node.x, node.y] = positions[node.id] })
-  const reused = map.id === 'level1_map2' ? 'B' : map.id === 'level1_map3' ? 'G2' : 'A'
-  map.edges = [['A','G1'],['B','G1'],['A','G2'],['B','G2'],['G1','W1'],['G2','W2'],['W1','G3'],['W2','G3'],['G3','OUT'],[reused,'OUT']]
-  map.description = '빈칸은 처음부터 자유롭게 선택합니다. 한쪽을 뒤집으면 다른 쪽은 통과합니다.'
-}
 
 export const MAP_BY_ID = Object.fromEntries(MAPS.map((map) => [map.id, map]))
 export function incomingEdges(map, nodeId) { return map.edges.filter(([, to]) => to === nodeId) }
