@@ -91,3 +91,22 @@ test('switch placement can change the result on each map',()=>{
   assert.ok(influential,map.id)
  }
 })
+
+test('map layouts keep turn counts fair and node arity valid',()=>{
+  for(const map of MAPS){
+    const gates=map.nodes.filter(n=>n.type==='gate')
+    const wilds=map.nodes.filter(n=>n.type==='wild')
+    const wildMoves=new Set(wilds.map(n=>n.pair || n.id)).size
+    assert.equal((gates.length+wildMoves)%2,0,map.id)
+    for(const node of gates) assert.equal(map.edges.filter(([,to])=>to===node.id).length,2,`${map.id}:${node.id}`)
+    for(const node of wilds) assert.equal(map.edges.filter(([,to])=>to===node.id).length,1,`${map.id}:${node.id}`)
+    const out=map.nodes.find(n=>n.type==='output')
+    assert.equal(map.edges.filter(([,to])=>to===out.id).length,out.gateType?2:1,map.id)
+  }
+})
+
+test('fixed XOR is a map-specific feature, not the universal ending',()=>{
+  const endings=MAPS.map(map=>map.nodes.find(n=>n.id==='OUT')?.gateType || 'PLAYED_GATE')
+  assert.ok(endings.includes('XOR'))
+  assert.ok(endings.includes('PLAYED_GATE'))
+})
